@@ -1,0 +1,178 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap');
+
+/* ============================================================
+   BootcampGrid.module.css — single row, 4 cards, light blue bg
+   ============================================================ */
+
+.section {
+  padding: 40px 32px;
+  background: linear-gradient(145deg, #d5dfed 0%, #dfe7f3 45%, #d2dceb 100%);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 18px 42px -34px rgba(15, 35, 72, 0.55);
+}
+
+.sectionTitle {
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1a2e;
+  text-align: center;
+  margin: 0 0 28px;
+}
+
+/* Exactly 4 equal columns — single row */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ── Card ── */
+.card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 251, 255, 0.92) 100%);
+  border: 1px solid rgba(173, 192, 225, 0.52);
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 28px -20px rgba(15, 35, 72, 0.55);
+  transition: box-shadow 0.24s ease, border-color 0.24s ease;
+}
+
+.card:hover {
+  background: linear-gradient(180deg, rgba(241, 247, 255, 0.98) 0%, rgba(233, 242, 255, 0.94) 100%);
+  border-color: rgba(128, 161, 219, 0.78);
+  box-shadow: 0 14px 28px -20px rgba(15, 35, 72, 0.6);
+}
+
+/* ── Thumbnail ── */
+.thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(170, 189, 218, 0.35);
+}
+
+.thumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(1.05) contrast(1.04);
+}
+
+.thumbFallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  padding: 12px;
+}
+
+.thumbTitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  text-transform: uppercase;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+  max-width: 80%;
+}
+
+.levelBadge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  background: #e0f0ff;
+  color: #1565c0;
+}
+
+/* ── Body ── */
+.body {
+  padding: 14px 15px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.title {
+  font-size: 1.04rem;
+  font-weight: 800;
+  color: #0f1f3d;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 42px;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.88rem;
+  color: #51617a;
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ── Divider / CTA ── */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(172, 191, 219, 0.1) 0%, rgba(154, 177, 210, 0.55) 50%, rgba(172, 191, 219, 0.1) 100%);
+  margin: 2px 0;
+}
+
+.startBtn {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  padding: 9px 0;
+  border-radius: 8px;
+  border: 1.5px solid #2f67ea;
+  background: rgba(255, 255, 255, 0.66);
+  color: #1f55d2;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-top: auto;
+}
+
+.startBtn:hover {
+  background: #255de0;
+  color: #fff;
+}
+
+.card:hover .startBtn {
+  background: #255de0;
+  color: #ffffff;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .section {
+    padding: 24px 16px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

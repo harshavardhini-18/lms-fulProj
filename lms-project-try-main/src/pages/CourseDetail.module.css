@@ -1,0 +1,885 @@
+/* ============================================================
+   CourseDetail.module.css — Cinema Layout (Option A)
+   ============================================================ */
+
+/* Page shell */
+.page {
+  padding: 16px 20px;
+  max-width: 1600px;
+  margin: 0 auto;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  background: var(--color-background-tertiary);
+  min-height: 100vh;
+}
+
+/* Breadcrumb */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-bottom: 18px;
+}
+
+.breadcrumbLink {
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.breadcrumbLink:hover {
+  color: var(--color-text-primary);
+}
+
+.breadcrumbSep {
+  color: var(--color-border-secondary);
+  user-select: none;
+}
+
+.breadcrumbCurrent {
+  color: var(--color-text-primary);
+}
+
+/* Two-column layout */
+.mainContainer {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+/* Left column */
+.leftColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+/* Course meta header */
+.titleBlock {
+  margin: 0 auto 10px;
+  width: 100%;
+  max-width: 970px;
+  padding: 0 12px;
+}
+
+.courseTitleCentered {
+  font-size: clamp(1.5rem, 2vw, 2rem);
+  font-weight: 600;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0 0 14px;
+  text-align: left;
+  max-width: 100%;
+}
+
+.courseTag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--color-background-info);
+  color: var(--color-text-info);
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+
+.courseTitle {
+  font-size: clamp(24px, 2.5vw, 34px);
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.courseMeta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* Video wrapper */
+.videoWrapper {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0a0a0a;
+  /* enforce 16:9 */
+  aspect-ratio: 16 / 9;
+  width: 100%;
+}
+
+/* Stretch VideoPlayer to fill the wrapper */
+.videoWrapper > * {
+  width: 100%;
+  height: 100%;
+}
+
+/* Quiz overlay — centered over video */
+.quizOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  z-index: 10;
+  padding: 24px;
+}
+
+/* Tab nav */
+.tabRow {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-top: 14px;
+  padding-bottom: 0;
+}
+
+.tabButton {
+  font-size: 1.02rem;
+  font-family: inherit;
+  font-weight: 500;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+  margin-bottom: -1px;
+}
+
+.tabButton:hover {
+  color: #0f172a;
+}
+
+.activeTab {
+  color: #0f172a;
+  border-bottom-color: #0f172a;
+  font-weight: 700;
+}
+
+/* Tab panel content */
+.overviewPanel {
+  padding: 20px 0 0;
+}
+.panelHeading {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin: 0 0 10px;
+}
+.panelBody {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+  margin: 0;
+}
+
+.summaryCard {
+  margin-top: 18px;
+  background: #f7f8fa;
+  border: 1px solid #eceff3;
+  border-radius: 8px;
+  padding: 24px;
+}
+.summaryHeading {
+  margin: 0 0 14px;
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #111827;
+}
+.summaryBody {
+  margin: 0;
+  font-size: clamp(15px, 1.8vw, 18px);
+  line-height: 1.7;
+  color: #273142; /* slightly darker for contrast */
+  white-space: pre-line;
+  max-width: 920px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: left;
+  letter-spacing: 0.01em;
+  word-break: break-word;
+}
+
+/* Improve the outer padding near the video and ensure the summary sits comfortably */
+.overviewPanel {
+  padding: 20px 0 8px;
+}
+
+/* Notes empty state */
+.notesEmpty {
+  border: 0.5px dashed var(--color-border-tertiary);
+  border-radius: 10px;
+  padding: 24px 20px;
+  text-align: center;
+}
+
+.notesEmpty p {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  margin: 0 0 10px;
+}
+
+.addNoteBtn {
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 0.5px solid var(--color-border-secondary);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.addNoteBtn:hover {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Right column — TOC card */
+.tocPanel {
+  position: sticky;
+  top: 16px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: 12px;
+  overflow: hidden;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  /* subtle scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-secondary) transparent;
+}
+
+.tocPanel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tocPanel::-webkit-scrollbar-thumb {
+  background: var(--color-border-secondary);
+  border-radius: 2px;
+}
+
+/* ============================================================
+   Responsive — collapse to single column below 860px
+   ============================================================ */
+@media (max-width: 860px) {
+  .page {
+    padding: 16px;
+  }
+
+  .mainContainer {
+    grid-template-columns: 1fr;
+  }
+
+  .tocPanel {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* ================= NOTES STUDIO ================= */
+
+.notesWrapper {
+  margin-top: 18px;
+  font-family: 'Poppins', 'Segoe UI', sans-serif;
+  padding: 0 8px;
+}
+
+.notesEmptyCenterWrap {
+  min-height: 260px;
+  border: 1px dashed #bcccdc;
+  border-radius: 16px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* Minimal inline saved indicator (appears beside title briefly) */
+.savedInline {
+  position: absolute;
+  top: 12px;
+  left: 88px; /* between date and expand arrow */
+  font-size: 0.78rem;
+  color: #64748b; /* muted gray */
+  opacity: 0;
+  transform: scale(0.98);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+
+.savedInlineShow {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.notesEmptyMessage {
+  text-align: center;
+}
+
+.notesEmptyTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #102a43;
+}
+
+.notesEmptyHint {
+  margin: 4px 0 0;
+  font-size: 0.92rem;
+  color: #486581;
+}
+
+.addNewBtnCenter {
+  border: 0;
+  background: linear-gradient(120deg, #1f7a8c, #022b3a);
+  color: #ffffff;
+  padding: 14px 20px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 20px rgba(2, 43, 58, 0.24);
+}
+
+.notesTopBar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.notesHeading {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #102a43;
+  letter-spacing: 0.01em;
+}
+
+.notesSubheading {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: #4f6272;
+}
+
+.addNewBtn {
+  border: 0;
+  background: linear-gradient(120deg, #1f7a8c, #022b3a);
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 18px rgba(2, 43, 58, 0.2);
+  letter-spacing: 0.01em;
+}
+
+.notesSingleColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.notesRail {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.railTitle {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #334e68;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.emptyRail {
+  margin: 0;
+  color: #627d98;
+  font-size: 0.85rem;
+}
+
+.noteList {
+  max-height: none;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 36px;
+}
+
+.noteItem {
+  border: 1px solid #d9e2ec;
+  border-radius: 14px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.noteItem {
+  position: relative; /* allow absolute date placement */
+}
+
+.noteItem:last-child {
+  margin-bottom: 22px;
+}
+
+.noteItemOpen {
+  border-color: #cdd8e5;
+  box-shadow: none;
+}
+
+.noteCard {
+  width: 100%;
+  border: 0;
+  background: #ffffff;
+  border-radius: 0;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  position: relative;
+}
+
+.noteCard:hover {
+  background: #f8fbfd;
+}
+
+.noteCardActive {
+  background: #f5fbfd;
+}
+
+.noteCardMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 0;
+}
+
+.noteCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 128px; /* reserve right space only for date + arrow on header row */
+}
+
+.noteCardTitle {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #102a43;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  /* keep title visible and flexible while preserving date/arrow space */
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.noteCardTitleText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inline saved indicator next to title */
+.savedInline {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.78rem;
+  color: #15803d; /* muted green */
+  font-weight: 600;
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 220ms cubic-bezier(.2,.9,.2,1), transform 220ms cubic-bezier(.2,.9,.2,1);
+  line-height: 1;
+}
+
+.savedInlineShow {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.noteCardDate {
+  font-size: 0.78rem;
+  color: #486581;
+  flex: 0 0 auto;
+  margin-left: 8px;
+  white-space: nowrap;
+  position: absolute;
+  top: 12px;
+  right: 52px; /* keep clear gap from arrow */
+  background: rgba(255,255,255,0.0);
+  padding: 0 4px;
+}
+
+.noteCardSnippet {
+  font-size: 0.82rem;
+  color: #627d98;
+  display: block;
+  width: 80%;
+  max-width: 80%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.noteCardArrowBtn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  position: absolute;
+  top: 8px;
+  right: 12px;
+}
+.noteCardArrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #f0f4f8;
+  color: #334e68;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+}
+.noteCardArrow i {
+  font-size: 13px;
+  line-height: 1;
+}
+.noteCardArrowOpen {
+  transform: rotate(180deg);
+  background: #d7eff4;
+  color: #0c4a5a;
+}
+.noteExpandedBody {
+  border-top: 1px solid #e4edf5;
+  padding: 56px 92px 12px 12px;
+  background: #ffffff;
+  position: relative;
+}
+.noteExpandedActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+}
+.iconActionBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #c7d3df;
+  background: #ffffff;
+  color: #1f3b57;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.iconActionBtn i {
+  font-size: 14px;
+  line-height: 1;
+}
+.iconActionBtn:hover {
+  transform: translateY(-1px);
+  background: #f3f8fc;
+  border-color: #b8c8d8;
+}
+.iconDeleteBtn {
+  color: #dc2626;
+}
+.iconDeleteBtn:hover {
+  background: #fff5f5;
+  border-color: #f3b2b2;
+}
+.textPreview,
+.noteImage,
+.previewEmpty {
+  padding-top: 0;
+}
+
+/* small utility buttons used in notes */
+.secondaryBtn {
+  padding: 8px 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ghostBtn {
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #ef4444; /* red-ish for delete */
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.noteWorkspace {
+  min-width: 0;
+}
+
+.noteFormCard,
+.previewCard {
+  border: 1px solid #d9e2ec;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.label {
+  margin: 0 0 6px;
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334e68;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.titleInput {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid #bcccdc;
+  padding: 0 12px;
+  margin-bottom: 14px;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.drawLabelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.drawHint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #627d98;
+}
+
+.canvasArea {
+  margin-bottom: 12px;
+}
+
+.hiddenEditor {
+  display: none;
+}
+
+.textEditor {
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid #bcccdc;
+  border-radius: 14px;
+  padding: 14px;
+  resize: vertical;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: #102a43;
+  background: #ffffff;
+  margin-bottom: 12px;
+}
+
+.textEditor:focus {
+  outline: none;
+  border-color: #486581;
+  box-shadow: 0 0 0 3px rgba(72, 101, 129, 0.14);
+}
+
+.modeToggleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #e8f1f5;
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 10px;
+}
+
+.modeToggleBtn {
+  border: 0;
+  background: transparent;
+  color: #334e68;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.modeToggleBtnActive {
+  background: #ffffff;
+  color: #102a43;
+  box-shadow: 0 2px 8px rgba(16, 42, 67, 0.12);
+}
+
+.formError {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  color: #b42318;
+  font-weight: 600;
+}
+
+.noteActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.secondaryBtn {
+  border: 1px solid #bcccdc;
+  background: #ffffff;
+  color: #334e68;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.addNoteBtn {
+  border: 0;
+  background: linear-gradient(120deg, #2f855a, #276749);
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.previewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.previewHeader h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #102a43;
+}
+
+.previewMeta {
+  margin: 8px 0 12px;
+  font-size: 0.8rem;
+  color: #627d98;
+}
+
+.previewEmpty {
+  margin: 0;
+  color: #627d98;
+  font-size: 0.9rem;
+}
+
+.noteImage {
+  width: 100%;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+.textPreview {
+  margin-top: 6px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #102a43;
+  font-size: 0.96rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 860px) {
+  .summaryCard {
+    padding: 16px;
+  }
+  .summaryHeading {
+    font-size: 20px;
+  }
+  .summaryBody {
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .notesTopBar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .notesSingleColumn {
+    gap: 12px;
+  }
+
+  .notesRail {
+    min-height: auto;
+  }
+
+  .noteActions {
+    flex-direction: column;
+  }
+
+  .secondaryBtn,
+  .addNoteBtn,
+  .addNewBtn,
+  .addNewBtnCenter {
+    width: 100%;
+    text-align: center;
+  }
+
+  .previewHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

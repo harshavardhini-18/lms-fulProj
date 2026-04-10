@@ -1,0 +1,188 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap');
+
+.cardLink {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  font-family: 'Manrope', sans-serif;
+}
+
+/* ============================================================
+   CourseCard.module.css — card layout like reference UI
+   ============================================================ */
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+  transition: box-shadow 0.2s, border-color 0.2s, background-color 0.2s;
+}
+
+.card:hover {
+  background: #f8fbff;
+  border-color: #9ab9f7;
+  box-shadow: 0 8px 20px -14px rgba(37, 99, 235, 0.45);
+}
+
+.thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+
+.thumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbFallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  padding: 12px;
+  background: linear-gradient(135deg, #0f172a, #334155);
+}
+
+.thumbTitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  text-transform: uppercase;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  max-width: 80%;
+}
+
+.levelBadge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  background: #e0f0ff;
+  color: #1565c0;
+}
+
+.body {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.4;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 36px;
+  margin: 0;
+}
+
+.author {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.author b {
+  font-weight: 400;
+  color: #374151;
+}
+
+.ratingRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stars {
+  font-size: 13px;
+  color: #f0b429;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.ratingNum {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-left: 2px;
+}
+
+.techStack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0;
+}
+
+.techBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+  background: #e5f0ff;
+  color: #111827;
+}
+
+.techDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #22c55e;
+}
+
+.divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 4px 0;
+}
+
+.startBtn {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  padding: 9px 0;
+  border-radius: 8px;
+  border: 1.5px solid #3b82f6;
+  background: none;
+  color: #2563eb;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-top: auto;
+  text-align: center;
+}
+
+.startBtn:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
+.card:hover .startBtn {
+  background: #2563eb;
+  color: #ffffff;
+}

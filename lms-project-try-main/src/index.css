@@ -1,0 +1,38 @@
+:root {
+  font-family: Inter, 'Segoe UI', Roboto, Arial, sans-serif;
+  color: #0f172a;
+  background-color: #ffffff;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Shared design tokens used by CourseDetail and other pages */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #4b5563;
+  --color-text-tertiary: #9ca3af;
+
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f9fafb;
+  --color-background-tertiary: #ffffff;
+
+  --color-background-info: #eef2ff;
+  --color-text-info: #4f46e5;
+
+  --color-border-secondary: #e5e7eb;
+  --color-border-tertiary: #e5e7eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+}
+
+#root {
+  min-height: 100vh;
+  background: #ffffff;
+}

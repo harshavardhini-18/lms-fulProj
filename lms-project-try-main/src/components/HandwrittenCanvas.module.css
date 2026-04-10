@@ -1,0 +1,61 @@
+.canvasShell {
+  border: 1px solid #d0d9e8;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.canvasViewport {
+  width: 100%;
+  height: 520px;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+.readOnlyShell .canvasViewport {
+  overflow: hidden;
+}
+
+.readOnlyShell :global(.excalidraw .App-menu_top),
+.readOnlyShell :global(.excalidraw .App-menu_bottom),
+.readOnlyShell :global(.excalidraw .layer-ui__wrapper__footer),
+.readOnlyShell :global(.excalidraw .layer-ui__wrapper__top-right),
+.readOnlyShell :global(.excalidraw .layer-ui__wrapper__top-left),
+.readOnlyShell :global(.excalidraw .main-menu),
+.readOnlyShell :global(.excalidraw .sidebar-trigger),
+.readOnlyShell :global(.excalidraw .Island),
+.readOnlyShell :global(.excalidraw .help-icon),
+.readOnlyShell :global(.excalidraw .scrollbar) {
+  display: none !important;
+}
+
+:global(.excalidraw .scroll-backdrop) {
+  background: #ffffff !important;
+  background-image: none !important;
+}
+
+:global(.excalidraw .scroll-backdrop > svg) {
+  display: none !important;
+}
+
+:global(.excalidraw .main-menu),
+:global(.excalidraw .help-icon),
+:global(.excalidraw .layer-ui__wrapper__top-right) {
+  display: none !important;
+}
+
+:global(.excalidraw button[aria-label='Main menu']) {
+  display: none !important;
+}
+
+:global(.excalidraw) {
+  max-width: 100%;
+}
+
+@media (max-width: 700px) {
+  .canvasViewport {
+    height: 420px;
+  }
+}

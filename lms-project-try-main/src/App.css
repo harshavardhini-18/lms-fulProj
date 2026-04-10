@@ -1,0 +1,46 @@
+.appShell {
+  --app-header-height: 84px;
+  min-height: 100vh;
+  background: #ffffff;
+}
+
+.appShell main {
+  padding-top: var(--app-header-height);
+}
+
+.placeholderPage {
+  min-height: calc(100vh - var(--app-header-height));
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 0.75rem;
+  padding: 1.4rem;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #2563eb;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.placeholderPage h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: clamp(1.9rem, 4.2vw, 3.1rem);
+}
+
+.placeholderPage p {
+  margin: 0;
+  color: #334155;
+  max-width: 660px;
+  line-height: 1.6;
+}
+
+.routeLoading {
+  min-height: calc(100vh - var(--app-header-height));
+  display: grid;
+  place-items: center;
+  color: #334155;
+  font-weight: 600;
+}

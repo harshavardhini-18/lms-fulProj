@@ -1,0 +1,132 @@
+.wrapper {
+	min-height: calc(100vh - 84px);
+	padding: 1.35rem;
+	background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 52%, #ffffff 100%);
+}
+
+.container {
+	max-width: 920px;
+	margin: 0 auto;
+	display: grid;
+	gap: 1rem;
+}
+
+.headerBlock {
+	background: #ffffff;
+	border: 1px solid #e2e8f0;
+	border-radius: 14px;
+	padding: 1rem;
+}
+
+.eyebrow {
+	margin: 0;
+	color: #1d4ed8;
+	font-weight: 700;
+}
+
+.title {
+	margin: 0.45rem 0 0;
+	color: #0f172a;
+}
+
+.subtitle {
+	margin: 0.4rem 0 0;
+	color: #475569;
+	line-height: 1.5;
+}
+
+.buttonRow {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.65rem;
+}
+
+.roleButton {
+	border: 1px solid #93c5fd;
+	background: #eff6ff;
+	color: #1e3a8a;
+	border-radius: 10px;
+	padding: 0.62rem 0.92rem;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.roleButtonActive {
+	border-color: #1d4ed8;
+	background: #1d4ed8;
+	color: #ffffff;
+}
+
+.formCard {
+	background: #ffffff;
+	border: 1px solid #e2e8f0;
+	border-radius: 14px;
+	padding: 1rem;
+}
+
+.formTitle {
+	margin: 0;
+	color: #0f172a;
+	font-size: 1.15rem;
+}
+
+.form {
+	margin-top: 0.7rem;
+	display: grid;
+	gap: 0.6rem;
+}
+
+.label {
+	color: #334155;
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.input {
+	width: 100%;
+	border: 1px solid #cbd5e1;
+	border-radius: 9px;
+	padding: 0.62rem 0.68rem;
+	font-size: 0.95rem;
+	color: #0f172a;
+}
+
+.input:focus {
+	border-color: #2563eb;
+	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+	outline: none;
+}
+
+.autoRole {
+	margin: 0.1rem 0;
+	color: #334155;
+	font-weight: 600;
+}
+
+.submitButton {
+	border: 0;
+	border-radius: 9px;
+	background: #2563eb;
+	color: #ffffff;
+	font-weight: 700;
+	padding: 0.7rem 0.8rem;
+	cursor: pointer;
+}
+
+.submitButton:disabled {
+	opacity: 0.65;
+	cursor: not-allowed;
+}
+
+.message {
+	margin: 0.75rem 0 0;
+	font-weight: 600;
+}
+
+.success {
+	color: #15803d;
+}
+
+.error {
+	color: #b91c1c;
+}

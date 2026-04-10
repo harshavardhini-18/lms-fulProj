@@ -1,0 +1,24 @@
+.playerSection {
+  width: 99%;
+  max-width: 970px;
+  margin: 0 auto;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #111827;
+  background: #000000;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.24);
+}
+
+.video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  background: #000;
+}
+
+.overlayLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
