@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { connectDB } from '../config/db.js';
 import { Course, User, initializeIndexes } from '../models/index.js';
+import { toSlug } from '../models/helpers.js';
 
 dotenv.config();
 
@@ -38,17 +39,61 @@ async function runSeed() {
   }
 
   const hasCourse = await Course.findOne({ createdBy: admin._id });
-  if (!hasCourse) {
+  const frontendCoursesModule = await import(
+    '../../lms-project-try-main/src/data/coursesData.js'
+  ).catch(() => null);
+
+  const frontendCourses = frontendCoursesModule?.courses;
+
+  if (Array.isArray(frontendCourses) && frontendCourses.length > 0) {
+    for (const c of frontendCourses) {
+      const title = String(c?.title || '').trim();
+      if (!title) continue;
+
+      const slug = toSlug(title);
+
+      const lessons =
+        Array.isArray(c?.lessons) && c.lessons.length > 0
+          ? c.lessons.map((l, i) => ({
+              title: String(l?.title || `Lesson ${i + 1}`).trim(),
+              order: i,
+              startSeconds: Number(l?.startSeconds || 0),
+              endSeconds: undefined,
+              moduleTitle: '',
+              resources: [],
+            }))
+          : [];
+
+      await Course.updateOne(
+        { slug },
+        {
+          $setOnInsert: {
+            slug,
+            createdBy: admin._id,
+          },
+          $set: {
+            title,
+            description: String(c?.description || ''),
+            videoUrl: String(c?.videoUrl || 'https://www.w3schools.com/html/mov_bbb.mp4'),
+            duration: 0,
+            lessons,
+            updatedBy: admin._id,
+          },
+        },
+        { upsert: true }
+      );
+    }
+
+    console.log(`Seeded/updated ${frontendCourses.length} frontend courses`);
+  } else if (!hasCourse) {
     await Course.create({
       title: 'Intro to LMS Platform',
+      slug: toSlug('Intro to LMS Platform'),
       subtitle: 'Sample seeded course',
       description: 'Seeded course for API smoke testing.',
       summary: 'Seed sample',
-      video: {
-        provider: 'other',
-        url: 'https://example.com/video/intro.mp4',
-        durationSeconds: 600,
-      },
+      videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+      duration: 600,
       lessons: [
         {
           title: 'Welcome',
@@ -58,7 +103,6 @@ async function runSeed() {
           moduleTitle: 'Getting Started',
         },
       ],
-      status: 'published',
       publishedAt: new Date(),
       createdBy: admin._id,
       updatedBy: admin._id,

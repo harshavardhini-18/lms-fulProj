@@ -4,6 +4,8 @@ import VideoPlayer from '../components/VideoPlayer'
 import TimedQuizGate from '../components/TimedQuizGate'
 import TableOfContents from '../components/TableOfContents'
 import HandwrittenCanvas from '../components/HandwrittenCanvas'
+import { resolveBackendCourseId } from '../api/courses'
+import { createNote, deleteNote, listNotesByCourse, updateNote } from '../api/notes'
 
 import { courses } from '../data/coursesData'
 import styles from './CourseDetail.module.css'
@@ -109,6 +111,9 @@ function CourseDetail() {
   const [editorMode, setEditorMode] = useState('text')
   const [editingNoteId, setEditingNoteId] = useState(null)
   const [formError, setFormError] = useState('')
+  const [composerInitialScene, setComposerInitialScene] = useState(EMPTY_SCENE)
+  const [notesSource, setNotesSource] = useState('local') // 'local' | 'backend'
+  const [backendCourseId, setBackendCourseId] = useState(null)
   // composer save button transient state
   const [saveBtnSaved, setSaveBtnSaved] = useState(false)
   const saveBtnTimeoutRef = useRef(null)
@@ -116,31 +121,71 @@ function CourseDetail() {
   const [recentlySavedNoteId, setRecentlySavedNoteId] = useState(null)
   const recentlySavedTimerRef = useRef(null)
 
-  // LOAD NOTES
-  useEffect(() => {
+  const loadLocalNotes = () => {
     const saved = localStorage.getItem(`notes-${id}`)
     if (!saved) {
-      // schedule state updates async to avoid synchronous setState in effect
-      Promise.resolve().then(() => {
-        setNotes([])
-        setSelectedNoteId(null)
-        setIsComposerOpen(false)
-      })
+      setNotes([])
+      setSelectedNoteId(null)
+      setIsComposerOpen(false)
       return
     }
 
     const parsedNotes = JSON.parse(saved)
-    Promise.resolve().then(() => {
-      setNotes(parsedNotes)
-      setSelectedNoteId(null)
-      setIsComposerOpen(false)
-    })
-  }, [id])
+    setNotes(Array.isArray(parsedNotes) ? parsedNotes : [])
+    setSelectedNoteId(null)
+    setIsComposerOpen(false)
+  }
 
-  // SAVE NOTES
+  const persistLocalNotes = (nextNotes) => {
+    localStorage.setItem(`notes-${id}`, JSON.stringify(nextNotes))
+  }
+
+  // LOAD NOTES (backend first; fallback to localStorage)
   useEffect(() => {
-    localStorage.setItem(`notes-${id}`, JSON.stringify(notes))
-  }, [notes, id])
+    let cancelled = false
+
+    async function loadNotes() {
+      setBackendCourseId(null)
+
+      try {
+        const userId = localStorage.getItem('lmsUserId')
+        if (!userId) throw new Error('Missing user id')
+
+        const resolvedCourseId =
+          (await resolveBackendCourseId(course)) || import.meta.env.VITE_BACKEND_COURSE_ID || null
+
+        if (!resolvedCourseId) throw new Error('Missing backend course id')
+
+        const backendNotes = await listNotesByCourse(resolvedCourseId)
+        if (cancelled) return
+
+        const mapped = backendNotes.map((n) => ({
+          id: n._id,
+          title: n.title || '',
+          textContent: n.textContent || '',
+          scene: n.drawingScene || EMPTY_SCENE,
+          createdAt: n.createdAt || new Date().toISOString(),
+          lastSavedAt: n.lastSavedAt || n.updatedAt || new Date().toISOString(),
+          _raw: n,
+        }))
+
+        setNotesSource('backend')
+        setBackendCourseId(resolvedCourseId)
+        setNotes(mapped)
+        setSelectedNoteId(null)
+        setIsComposerOpen(false)
+      } catch {
+        if (cancelled) return
+        setNotesSource('local')
+        loadLocalNotes()
+      }
+    }
+
+    loadNotes()
+    return () => {
+      cancelled = true
+    }
+  }, [id, course?.title])
 
   // VIDEO TRACKING
   useEffect(() => {
@@ -194,6 +239,7 @@ function CourseDetail() {
     setEditorMode('text')
     setFormError('')
     setEditingNoteId(null)
+    setComposerInitialScene(EMPTY_SCENE)
 
     if (canvasRef.current) {
       canvasRef.current.clearCanvas()
@@ -213,6 +259,7 @@ function CourseDetail() {
 
     // If the note has a drawing scene, open the canvas in draw mode and set the scene
     const scene = note?.scene || EMPTY_SCENE
+    setComposerInitialScene(scene)
     if (hasDrawing(scene)) {
       setEditorMode('draw')
       // give the canvas a moment to mount (if needed) then set scene
@@ -238,17 +285,77 @@ function CourseDetail() {
   }
 
   const handleDeleteNote = (noteId) => {
-    setNotes((prev) => prev.filter((n) => n.id !== noteId))
-    // if deleting the currently selected note, collapse
-    if (selectedNoteId === noteId) setSelectedNoteId(null)
-    // if deleting the note being edited, close composer
-    if (editingNoteId === noteId) {
-      setIsComposerOpen(false)
-      setEditingNoteId(null)
+    const run = async () => {
+      if (notesSource === 'backend') {
+        try {
+          await deleteNote(noteId)
+        } catch {
+          // keep UI unchanged on failure
+          return
+        }
+      }
+
+      setNotes((prev) => {
+        const next = prev.filter((n) => n.id !== noteId)
+        if (notesSource === 'local') persistLocalNotes(next)
+        return next
+      })
+
+      // if deleting the currently selected note, collapse
+      if (selectedNoteId === noteId) setSelectedNoteId(null)
+      // if deleting the note being edited, close composer
+      if (editingNoteId === noteId) {
+        setIsComposerOpen(false)
+        setEditingNoteId(null)
+      }
     }
+
+    run()
   }
 
   const handleSaveNote = () => {
+    const saveToBackend = async ({ title, textContent, scene }) => {
+      if (!backendCourseId) throw new Error('Missing backend course')
+
+      const anchorTimestampSeconds = Math.floor(Number(videoRef.current?.currentTime || 0))
+
+      if (editingNoteId) {
+        const updated = await updateNote(editingNoteId, {
+          title,
+          textContent,
+          drawingScene: scene,
+          anchorTimestampSeconds,
+        })
+        return {
+          id: updated._id,
+          title: updated.title || '',
+          textContent: updated.textContent || '',
+          scene: updated.drawingScene || EMPTY_SCENE,
+          createdAt: updated.createdAt || new Date().toISOString(),
+          lastSavedAt: updated.lastSavedAt || updated.updatedAt || new Date().toISOString(),
+          _raw: updated,
+        }
+      }
+
+      const created = await createNote({
+        course: backendCourseId,
+        title,
+        textContent,
+        drawingScene: scene,
+        anchorTimestampSeconds,
+      })
+
+      return {
+        id: created._id,
+        title: created.title || '',
+        textContent: created.textContent || '',
+        scene: created.drawingScene || EMPTY_SCENE,
+        createdAt: created.createdAt || new Date().toISOString(),
+        lastSavedAt: created.lastSavedAt || created.updatedAt || new Date().toISOString(),
+        _raw: created,
+      }
+    }
+
     const title = noteTitle.trim()
     const content = noteText.trim()
     const scene = canvasRef.current?.getScene?.() || EMPTY_SCENE
@@ -266,57 +373,91 @@ function CourseDetail() {
 
     const now = new Date().toISOString()
 
-    if (editingNoteId) {
-      // update existing note
-      setNotes((prev) => {
-        const updated = prev.map((n) =>
-          n.id === editingNoteId
-            ? { ...n, title, textContent: noteText, scene, lastSavedAt: now, _previous: { ...n } }
-            : n
-        )
-        return updated
-      })
-      setEditingNoteId(null)
-      // mark this note as recently saved so the inline indicator shows immediately
-      setRecentlySavedNoteId(editingNoteId)
-      if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
-      recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
-    } else {
-      const newNote = {
-        id: Date.now(),
-        title,
-        textContent: noteText,
-        scene,
-        createdAt: now,
-        lastSavedAt: now,
-        _action: 'created',
+    const run = async () => {
+      if (notesSource === 'backend') {
+        try {
+          const saved = await saveToBackend({ title, textContent: noteText, scene })
+
+          setNotes((prev) => {
+            const next = editingNoteId
+              ? prev.map((n) => (n.id === editingNoteId ? { ...n, ...saved } : n))
+              : [saved, ...prev]
+            return next
+          })
+
+          if (editingNoteId) {
+            setRecentlySavedNoteId(editingNoteId)
+          } else {
+            shouldScrollAfterCreateRef.current = true
+            setRecentlySavedNoteId(saved.id)
+          }
+        } catch {
+          setFormError('Failed to save note. Please try again.')
+          return
+        } finally {
+          setEditingNoteId(null)
+        }
+
+        if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
+        recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
+      } else {
+        if (editingNoteId) {
+          // update existing note
+          setNotes((prev) => {
+            const updated = prev.map((n) =>
+              n.id === editingNoteId
+                ? { ...n, title, textContent: noteText, scene, lastSavedAt: now, _previous: { ...n } }
+                : n,
+            )
+            persistLocalNotes(updated)
+            return updated
+          })
+          setEditingNoteId(null)
+          // mark this note as recently saved so the inline indicator shows immediately
+          setRecentlySavedNoteId(editingNoteId)
+          if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
+          recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
+        } else {
+          const newNote = {
+            id: Date.now(),
+            title,
+            textContent: noteText,
+            scene,
+            createdAt: now,
+            lastSavedAt: now,
+            _action: 'created',
+          }
+
+          setNotes((prev) => {
+            const updated = [newNote, ...prev]
+            setSelectedNoteId(null)
+            persistLocalNotes(updated)
+            return updated
+          })
+          shouldScrollAfterCreateRef.current = true
+          // ensure the newly created note shows the inline saved indicator
+          setRecentlySavedNoteId(newNote.id)
+          if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
+          recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
+        }
       }
 
-      setNotes((prev) => {
-        const updated = [newNote, ...prev]
-        setSelectedNoteId(null)
-        return updated
-      })
-      shouldScrollAfterCreateRef.current = true
-      // ensure the newly created note shows the inline saved indicator
-      setRecentlySavedNoteId(newNote.id)
-      if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
-      recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
+      setNoteTitle('')
+      setNoteText('')
+      setIsComposerOpen(false)
+      setFormError('')
+
+      if (canvasRef.current) {
+        canvasRef.current.clearCanvas()
+      }
+
+      // composer save button temporary feedback
+      if (saveBtnTimeoutRef.current) clearTimeout(saveBtnTimeoutRef.current)
+      setSaveBtnSaved(true)
+      saveBtnTimeoutRef.current = setTimeout(() => setSaveBtnSaved(false), 1500)
     }
 
-    setNoteTitle('')
-    setNoteText('')
-    setIsComposerOpen(false)
-    setFormError('')
-
-    if (canvasRef.current) {
-      canvasRef.current.clearCanvas()
-    }
-
-    // composer save button temporary feedback
-    if (saveBtnTimeoutRef.current) clearTimeout(saveBtnTimeoutRef.current)
-    setSaveBtnSaved(true)
-    saveBtnTimeoutRef.current = setTimeout(() => setSaveBtnSaved(false), 1500)
+    run()
   }
 
   useEffect(() => {
@@ -405,7 +546,7 @@ function CourseDetail() {
           </button>
         </div>
 
-        {selectedNoteId === note.id && (
+        {selectedNoteId === note.id && !(isComposerOpen && editingNoteId === note.id) && (
           <div className={styles.noteExpandedBody}>
             {note.textContent && <div className={styles.textPreview}>{note.textContent}</div>}
 
@@ -558,9 +699,9 @@ function CourseDetail() {
 
                         <div className={`${styles.canvasArea} ${editorMode === 'draw' ? '' : styles.hiddenEditor}`}>
                           <HandwrittenCanvas
-                            key="composer-canvas"
+                            key={`composer-canvas-${editingNoteId || 'new'}`}
                             ref={canvasRef}
-                            initialScene={EMPTY_SCENE}
+                            initialScene={composerInitialScene}
                             activeTool="freedraw"
                             height={520}
                           />

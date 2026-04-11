@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { onAuthStateChanged } from 'firebase/auth'
 import Navbar from './components/Navbar'
 import Courses from './pages/Courses'
 import CourseDetail from './pages/CourseDetail'
 import Login from './pages/Login'
 import AdminUsers from './pages/AdminUsers'
+import AdminDashboard from './pages/AdminDashboard'
+import AdminCoursesManagement from './pages/AdminCoursesManagement'
+import Reports from './pages/Reports'
+import StaffDashboard from './pages/StaffDashboard'
+import StudentHome from './pages/StudentHome'
+import { AuthProvider } from './auth/AuthContext'
 import { auth } from './firebase'
 import './App.css'
 
@@ -41,13 +47,20 @@ function PublicOnlyRoute({ isLoading, user, children }) {
   }
 
   if (user) {
-    return <Navigate to="/courses" replace />
+    const role = String(localStorage.getItem('lmsUserRole') || 'student').toLowerCase()
+    const destination =
+      role === 'admin'
+        ? '/admin/dashboard'
+        : role === 'staff'
+          ? '/staff/dashboard'
+          : '/student/home'
+    return <Navigate to={destination} replace />
   }
 
   return children
 }
 
-function AdminOnlyRoute({ isLoading, user, role, children }) {
+function RoleOnlyRoute({ isLoading, user, role, allowedRoles, children }) {
   if (isLoading) {
     return <div className="routeLoading">Checking login…</div>
   }
@@ -56,11 +69,23 @@ function AdminOnlyRoute({ isLoading, user, role, children }) {
     return <Navigate to="/login" replace />
   }
 
-  if (String(role || '').toLowerCase() !== 'admin') {
-    return <Navigate to="/courses" replace />
+  const normalizedRole = String(role || '').toLowerCase()
+  if (!allowedRoles.includes(normalizedRole)) {
+    const destination =
+      normalizedRole === 'admin'
+        ? '/admin/dashboard'
+        : normalizedRole === 'staff'
+          ? '/staff/dashboard'
+          : '/student/home'
+    return <Navigate to={destination} replace />
   }
 
   return children
+}
+
+function LegacyCourseDetailRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/student/courses/${id}`} replace />
 }
 
 function App() {
@@ -115,13 +140,15 @@ function App() {
   }, [])
 
   const showNavbar = location.pathname !== '/login'
+  const normalizedRole = String(authRole || '').toLowerCase() || null
 
   return (
-    <div className="appShell">
-      {showNavbar ? <Navbar isAdmin={authRole === 'admin'} /> : null}
+    <AuthProvider value={{ user: authUser, role: normalizedRole, isLoading: isAuthLoading }}>
+      <div className="appShell">
+        {showNavbar ? <Navbar role={normalizedRole || 'student'} /> : null}
 
-      <main>
-        <Routes>
+        <main>
+          <Routes>
           <Route
             path="/login"
             element={
@@ -134,66 +161,171 @@ function App() {
             path="/"
             element={
               <ProtectedRoute isLoading={isAuthLoading} user={authUser}>
-                <PlaceholderPage
-                  title="Welcome to LMS Learning"
-                  subtitle="Explore curated courses, build skills faster, and earn certifications at your pace."
+                <Navigate
+                  to={
+                    normalizedRole === 'admin'
+                      ? '/admin/dashboard'
+                      : normalizedRole === 'staff'
+                        ? '/staff/dashboard'
+                        : '/student/home'
+                  }
+                  replace
                 />
               </ProtectedRoute>
             }
           />
+
+          {/* Student routes */}
           <Route
-            path="/courses"
+            path="/student/home"
             element={
-              <ProtectedRoute isLoading={isAuthLoading} user={authUser}>
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <StudentHome />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/student/courses"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
                 <Courses />
-              </ProtectedRoute>
+              </RoleOnlyRoute>
             }
           />
           <Route
-            path="/courses/:id"
+            path="/student/courses/:id"
             element={
-              <ProtectedRoute isLoading={isAuthLoading} user={authUser}>
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
                 <CourseDetail />
-              </ProtectedRoute>
+              </RoleOnlyRoute>
             }
           />
           <Route
-            path="/career"
+            path="/student/career"
             element={
-              <ProtectedRoute isLoading={isAuthLoading} user={authUser}>
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
                 <PlaceholderPage
                   title="Career Tracks"
                   subtitle="Career roadmap modules are coming soon with mentor-led paths and interview prep."
                 />
-              </ProtectedRoute>
+              </RoleOnlyRoute>
             }
           />
           <Route
-            path="/profile"
+            path="/student/profile"
             element={
-              <ProtectedRoute isLoading={isAuthLoading} user={authUser}>
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
                 <PlaceholderPage
                   title="Your Profile"
                   subtitle="Track your progress, certificates, and recommended next courses here."
                 />
-              </ProtectedRoute>
+              </RoleOnlyRoute>
+            }
+          />
+
+          {/* Backwards-compatible student paths */}
+          <Route path="/courses" element={<Navigate to="/student/courses" replace />} />
+          <Route path="/courses/:id" element={<LegacyCourseDetailRedirect />} />
+          <Route path="/career" element={<Navigate to="/student/career" replace />} />
+          <Route path="/profile" element={<Navigate to="/student/profile" replace />} />
+
+          {/* Admin routes */}
+          <Route
+            path="/admin/dashboard"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminDashboard />
+              </RoleOnlyRoute>
             }
           />
           <Route
             path="/admin/users"
             element={
-              <AdminOnlyRoute isLoading={isAuthLoading} user={authUser} role={authRole}>
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
                 <AdminUsers />
-              </AdminOnlyRoute>
+              </RoleOnlyRoute>
             }
           />
           <Route
-            path="*"
-            element={<Navigate to={authUser ? '/courses' : '/login'} replace />}
+            path="/admin/courses"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminCoursesManagement />
+              </RoleOnlyRoute>
+            }
           />
-        </Routes>
-      </main>
-    </div>
+          <Route
+            path="/admin/reports"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <Reports />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/profile"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <PlaceholderPage title="Admin Profile" subtitle="Admin profile settings (coming soon)." />
+              </RoleOnlyRoute>
+            }
+          />
+
+          {/* Staff routes */}
+          <Route
+            path="/staff/dashboard"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <StaffDashboard />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/courses"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <AdminCoursesManagement />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/reports"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <Reports />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/profile"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <PlaceholderPage title="Staff Profile" subtitle="Staff profile settings (coming soon)." />
+              </RoleOnlyRoute>
+            }
+          />
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={
+                  authUser
+                    ? normalizedRole === 'admin'
+                      ? '/admin/dashboard'
+                      : normalizedRole === 'staff'
+                        ? '/staff/dashboard'
+                        : '/student/home'
+                    : '/login'
+                }
+                replace
+              />
+            }
+          />
+          </Routes>
+        </main>
+      </div>
+    </AuthProvider>
   )
 }
 

@@ -130,3 +130,28 @@ export async function updateNoteWithAssetsAndProgress(userId, noteId, payload) {
     await session.endSession();
   }
 }
+
+export async function deleteNoteWithAssets(userId, noteId) {
+  const existing = await Note.findOne({ _id: noteId, user: userId, isDeleted: false });
+  if (!existing) throw new AppError('Note not found', 404);
+
+  const session = await mongoose.startSession();
+
+  try {
+    await session.withTransaction(async () => {
+      await Note.updateOne(
+        { _id: noteId, user: userId },
+        { $set: { isDeleted: true, lastSavedAt: new Date() } },
+        { session }
+      );
+
+      await ExcalidrawAsset.updateMany(
+        { note: existing._id, ownerUser: userId, isDeleted: false },
+        { $unset: { note: 1 } },
+        { session }
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+}

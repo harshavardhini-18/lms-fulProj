@@ -1,45 +1,67 @@
 
-import React, { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import styles from './Navbar.module.css';
-import { auth } from '../firebase';
+import React, { useEffect, useMemo, useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import styles from './Navbar.module.css'
+import { auth } from '../firebase'
 
-function Navbar({ isAdmin = false }) {
-  const navigate = useNavigate();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [authUser, setAuthUser] = useState(null);
+function Navbar({ role = 'student' }) {
+  const navigate = useNavigate()
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [authUser, setAuthUser] = useState(null)
 
-  const navItems = [
-    { label: 'Home', path: '/' },
-    { label: 'Courses', path: '/courses' },
-    { label: 'Career', path: '/career' },
-    { label: 'Profile', path: '/profile' },
-    ...(isAdmin ? [{ label: 'Admin Users', path: '/admin/users' }] : []),
-  ];
+  const navItems = useMemo(() => {
+    const normalizedRole = String(role || 'student').toLowerCase()
+
+    if (normalizedRole === 'admin') {
+      return [
+        { label: 'Dashboard', path: '/admin/dashboard' },
+        { label: 'User Management', path: '/admin/users' },
+        { label: 'Courses Management', path: '/admin/courses' },
+        { label: 'Reports', path: '/admin/reports' },
+        { label: 'Profile', path: '/admin/profile' },
+      ]
+    }
+
+    if (normalizedRole === 'staff') {
+      return [
+        { label: 'Dashboard', path: '/staff/dashboard' },
+        { label: 'Courses Management', path: '/staff/courses' },
+        { label: 'Reports', path: '/staff/reports' },
+        { label: 'Profile', path: '/staff/profile' },
+      ]
+    }
+
+    return [
+      { label: 'Home', path: '/student/home' },
+      { label: 'Courses', path: '/student/courses' },
+      { label: 'Career', path: '/student/career' },
+      { label: 'Profile', path: '/student/profile' },
+    ]
+  }, [role])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setAuthUser(user || null);
-    });
+      setAuthUser(user || null)
+    })
 
-    return () => unsubscribe();
-  }, []);
+    return () => unsubscribe()
+  }, [])
 
   // Dropdown handlers
-  const handleProfileClick = () => setDropdownOpen(v => !v);
+  const handleProfileClick = () => setDropdownOpen((v) => !v)
   const handleProfileBlur = (e) => {
     // Close dropdown if focus leaves
-    if (!e.currentTarget.contains(e.relatedTarget)) setDropdownOpen(false);
-  };
+    if (!e.currentTarget.contains(e.relatedTarget)) setDropdownOpen(false)
+  }
 
   const handleLogout = async () => {
-    await signOut(auth);
-    localStorage.removeItem('lmsUserId');
-    localStorage.removeItem('lmsUserRole');
-    setDropdownOpen(false);
-    navigate('/login', { replace: true });
-  };
+    await signOut(auth)
+    localStorage.removeItem('lmsUserId')
+    localStorage.removeItem('lmsUserRole')
+    setDropdownOpen(false)
+    navigate('/login', { replace: true })
+  }
 
   return (
     <header className={styles.wrapper}>
@@ -117,7 +139,7 @@ function Navbar({ isAdmin = false }) {
         </div>
       </nav>
     </header>
-  );
+  )
 }
 
-export default Navbar;
+export default Navbar

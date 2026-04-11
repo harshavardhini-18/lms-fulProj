@@ -9,6 +9,7 @@ import { firebaseAdminSignIn, login } from './controllers/authController.js';
 import authRoutes from './routes/authRoutes.js';
 import courseRoutes from './routes/courseRoutes.js';
 import quizRoutes from './routes/quizRoutes.js';
+import noteRoutes from './routes/noteRoutes.js';
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/quizzes', quizRoutes);
+app.use('/api/notes', noteRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

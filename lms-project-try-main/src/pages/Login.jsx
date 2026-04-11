@@ -14,7 +14,7 @@ function Login() {
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const redirectTo = location.state?.from && location.state?.from !== '/login' ? location.state.from : '/courses'
+  const redirectTo = location.state?.from && location.state?.from !== '/login' ? location.state.from : null
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -49,14 +49,28 @@ function Login() {
         const fallbackRole = String(tokenResult?.claims?.role || 'student').toLowerCase()
         localStorage.removeItem('lmsUserId')
         localStorage.setItem('lmsUserRole', fallbackRole)
-        navigate('/courses', { replace: true })
+        const fallbackDestination =
+          fallbackRole === 'admin'
+            ? '/admin/dashboard'
+            : fallbackRole === 'staff'
+              ? '/staff/dashboard'
+              : '/student/home'
+        navigate(redirectTo || fallbackDestination, { replace: true })
         return
       }
 
       localStorage.setItem('lmsUserId', backendUser._id)
-      localStorage.setItem('lmsUserRole', String(backendUser.role || '').toLowerCase())
+      const normalizedRole = String(backendUser.role || '').toLowerCase()
+      localStorage.setItem('lmsUserRole', normalizedRole)
 
-      navigate(redirectTo, { replace: true })
+      const destination =
+        normalizedRole === 'admin'
+          ? '/admin/dashboard'
+          : normalizedRole === 'staff'
+            ? '/staff/dashboard'
+            : '/student/home'
+
+      navigate(redirectTo || destination, { replace: true })
     } catch (error) {
       const code = error?.code || ''
       if (

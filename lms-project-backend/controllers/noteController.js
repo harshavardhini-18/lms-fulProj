@@ -1,6 +1,7 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import {
   createNoteWithAssetsAndProgress,
+  deleteNoteWithAssets,
   listNotesByCourse,
   updateNoteWithAssetsAndProgress,
 } from '../services/noteService.js';
@@ -18,4 +19,9 @@ export const create = asyncHandler(async (req, res) => {
 export const update = asyncHandler(async (req, res) => {
   const note = await updateNoteWithAssetsAndProgress(req.user._id, req.params.noteId, req.body);
   res.json({ success: true, data: note });
+});
+
+export const remove = asyncHandler(async (req, res) => {
+  await deleteNoteWithAssets(req.user._id, req.params.noteId);
+  res.json({ success: true });
 });

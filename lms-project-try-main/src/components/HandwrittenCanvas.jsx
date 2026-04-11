@@ -8,11 +8,44 @@ const HandwrittenCanvas = forwardRef(function HandwrittenCanvas(
   ref
 ) {
   const excalidrawAPIRef = useRef(null)
+  const pendingSceneRef = useRef(null)
+
+  const applySceneToApi = useCallback((api, scene, { preserveAppState = false } = {}) => {
+    if (!api) return
+
+    const safeScene = scene && typeof scene === 'object' ? scene : null
+    const nextElements = Array.isArray(safeScene?.elements) ? safeScene.elements : []
+    const prevAppState = api.getAppState()
+    const sceneAppState = safeScene?.appState && typeof safeScene.appState === 'object' ? safeScene.appState : null
+    const nextAppState = sceneAppState
+      ? {
+          ...(preserveAppState ? prevAppState : {}),
+          ...prevAppState,
+          ...sceneAppState,
+        }
+      : prevAppState
+    const nextFiles = safeScene?.files && typeof safeScene.files === 'object' ? safeScene.files : {}
+
+    api.updateScene({
+      elements: nextElements,
+      appState: {
+        ...nextAppState,
+        selectedElementIds: {},
+        selectedGroupIds: {},
+      },
+      files: nextFiles,
+    })
+  }, [])
+
   const handleApiReady = useCallback((api) => {
     if (api && excalidrawAPIRef.current !== api) {
       excalidrawAPIRef.current = api
+      if (pendingSceneRef.current) {
+        applySceneToApi(api, pendingSceneRef.current)
+        pendingSceneRef.current = null
+      }
     }
-  }, [])
+  }, [applySceneToApi])
 
   useEffect(() => {
     const excalidrawAPI = excalidrawAPIRef.current
@@ -50,6 +83,16 @@ const HandwrittenCanvas = forwardRef(function HandwrittenCanvas(
             selectedGroupIds: {},
           },
         })
+      },
+      setScene: (scene) => {
+        if (readOnly) return
+        const excalidrawAPI = excalidrawAPIRef.current
+        if (!excalidrawAPI) {
+          pendingSceneRef.current = scene
+          return
+        }
+
+        applySceneToApi(excalidrawAPI, scene)
       },
       setTool: (tool) => {
         const excalidrawAPI = excalidrawAPIRef.current
@@ -89,7 +132,7 @@ const HandwrittenCanvas = forwardRef(function HandwrittenCanvas(
         }
       },
     }
-  }, [])
+  }, [applySceneToApi, readOnly])
 
   return (
     <div className={`${styles.canvasShell} ${readOnly ? styles.readOnlyShell : ''}`}>

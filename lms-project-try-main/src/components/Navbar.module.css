@@ -80,6 +80,8 @@
 .active {
   color: #1d4ed8;
   font-weight: 700;
+  background: #eff6ff;
+  box-shadow: 0 10px 26px -22px rgba(37, 99, 235, 0.7);
 }
 
 /* Animated underline */
