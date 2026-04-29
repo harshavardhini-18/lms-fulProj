@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import styles from './StudentHome.module.css'
 
 function pad2(value) {
@@ -54,6 +55,7 @@ const STORAGE_KEY = 'lmsStudentReminders:v1'
 const SETTINGS_KEY = 'lmsStudentReminderSettings:v1'
 
 function StudentHome() {
+  const navigate = useNavigate()
   const now = new Date()
   const [activeMonth, setActiveMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1))
   const [selectedDay, setSelectedDay] = useState(() => startOfDay(now))
@@ -89,6 +91,35 @@ function StudentHome() {
 
   useEffect(() => saveJson(STORAGE_KEY, items), [items])
   useEffect(() => saveJson(SETTINGS_KEY, settings), [settings])
+
+  // Check if student needs to complete onboarding
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const userId = localStorage.getItem('lmsUserId')
+        const role = String(localStorage.getItem('lmsUserRole') || '').toLowerCase()
+        
+        if (role !== 'student' || !userId) return
+
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+        const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: { 'x-user-id': userId },
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          const user = data?.data
+          if (user?.isFirstTime !== false) {
+            navigate('/student/onboarding', { replace: true })
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check onboarding status:', err)
+      }
+    }
+
+    checkOnboarding()
+  }, [navigate])
 
   const normalizedItems = useMemo(() => {
     const parsed = Array.isArray(items) ? items : []
@@ -319,6 +350,7 @@ function StudentHome() {
     return `${styles.badge} ${styles.badgeStudy}`
   }
 
+  /*
   return (
     <section className={styles.page}>
       <div className={styles.container}>
@@ -598,6 +630,7 @@ function StudentHome() {
       ) : null}
     </section>
   )
+  */
 }
 
 export default StudentHome

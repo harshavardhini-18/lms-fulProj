@@ -1,0 +1,117 @@
+.lesson-form {
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.lesson-form .form-section {
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+}
+
+.lesson-form .form-section h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.lesson-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.lesson-form .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.lesson-form .form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.lesson-form .form-input,
+.lesson-form .form-textarea,
+.lesson-form .form-select {
+  padding: 11px 12px;
+  font-size: 14px;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  font-family: inherit;
+  transition: all 0.2s;
+  color: #0f172a;
+}
+
+.lesson-form .form-input:focus,
+.lesson-form .form-textarea:focus,
+.lesson-form .form-select:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.lesson-form .form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.lesson-form small {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Form Row */
+.lesson-form .form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+/* Checkbox Group */
+.lesson-form .checkbox-group {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.lesson-form .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.lesson-form .checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.lesson-form .checkbox-label span {
+  font-size: 13px;
+  color: #333;
+}
+
+/* Form Actions */
+.lesson-form .form-actions {
+  display: flex;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid #e8e8e8;
+  justify-content: flex-end;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .lesson-form .form-section {
+    padding: 16px;
+  }
+}

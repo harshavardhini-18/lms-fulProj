@@ -15,4 +15,3 @@ export async function connectDB() {
 
 	console.log(`MongoDB connected: ${mongoose.connection.name}`);
 }
-

@@ -5,7 +5,6 @@ import { Course, User, initializeIndexes } from '../models/index.js';
 import { toSlug } from '../models/helpers.js';
 
 dotenv.config();
-
 function hashPassword(password) {
   return new Promise((resolve, reject) => {
     const salt = crypto.randomBytes(16).toString('hex');
@@ -15,7 +14,6 @@ function hashPassword(password) {
     });
   });
 }
-
 async function runSeed() {
   await connectDB();
 
@@ -23,12 +21,12 @@ async function runSeed() {
     await initializeIndexes();
   }
 
-  const adminEmail = 'admin@lms.local';
+  // Use the configured email user as admin (ensures test emails can be sent)
+  const adminEmail = process.env.EMAIL_USER || 'admin@lms.local';
 
   let admin = await User.findOne({ email: adminEmail });
   if (!admin) {
     const passwordHash = await hashPassword('admin12345');
-
     admin = await User.create({
       fullName: 'LMS Admin',
       email: adminEmail,
@@ -36,6 +34,32 @@ async function runSeed() {
       role: 'admin',
       isEmailVerified: true,
     });
+    console.log(`✓ Created admin user: ${adminEmail}`);
+  }
+
+  // Create test student accounts with real email domains (for testing password reset)
+  const testStudents = [
+    { email: 'harshavardhini.cs21@bitsathy.ac.in', fullName: 'Test User', password: 'test123456' },
+    { email: 'student1@gmail.com', fullName: 'Test Student 1', password: 'student123' },
+    { email: 'student2@outlook.com', fullName: 'Test Student 2', password: 'student123' },
+  ];
+
+  // Delete and recreate test students to ensure passwordHash is set
+  await User.deleteMany({ 
+    email: { $in: testStudents.map(s => s.email.toLowerCase()) }
+  });
+
+  for (const student of testStudents) {
+    const passwordHash = await hashPassword(student.password);
+    await User.create({
+      fullName: student.fullName,
+      email: student.email,
+      passwordHash,
+      role: 'student',
+      isEmailVerified: true,
+      isFirstTime: true,
+    });
+    console.log(`✓ Created test student: ${student.email}`);
   }
 
   const hasCourse = await Course.findOne({ createdBy: admin._id });

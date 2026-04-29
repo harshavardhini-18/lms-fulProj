@@ -20,6 +20,10 @@ export function errorHandler(err, req, res, next) {
 		);
 	}
 
+	if (err?.code?.startsWith?.('auth/') || err?.errorInfo?.code?.startsWith?.('auth/')) {
+		error = new AppError('Invalid Firebase token. Please login again.', 401);
+	}
+
 	const statusCode = error.statusCode || 500;
 	const payload = {
 		success: false,
@@ -28,6 +32,9 @@ export function errorHandler(err, req, res, next) {
 
 	if (error.details) payload.details = error.details;
 	if (process.env.NODE_ENV !== 'production' && err?.stack) payload.stack = err.stack;
+	if (statusCode >= 500) {
+		console.error(`[API_ERROR] ${req.method} ${req.originalUrl}:`, err?.stack || err?.message || err);
+	}
 
 	res.status(statusCode).json(payload);
 }

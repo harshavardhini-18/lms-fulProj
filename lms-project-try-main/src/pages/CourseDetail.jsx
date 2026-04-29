@@ -97,6 +97,7 @@ function CourseDetail() {
   const lessons = useMemo(() => course?.lessons || [], [course])
   const modules = buildModuleSections(lessons)
   const timedQuiz = course?.timedQuiz || defaultTimedQuiz
+  const fallbackCourseId = useMemo(() => `frontend-course-${course?.id || id}`, [course?.id, id])
 
   const [activeLessonIndex, setActiveLessonIndex] = useState(0)
   const [isQuizVisible, setIsQuizVisible] = useState(false)
@@ -112,7 +113,7 @@ function CourseDetail() {
   const [editingNoteId, setEditingNoteId] = useState(null)
   const [formError, setFormError] = useState('')
   const [composerInitialScene, setComposerInitialScene] = useState(EMPTY_SCENE)
-  const [notesSource, setNotesSource] = useState('local') // 'local' | 'backend'
+  const [notesError, setNotesError] = useState('')
   const [backendCourseId, setBackendCourseId] = useState(null)
   // composer save button transient state
   const [saveBtnSaved, setSaveBtnSaved] = useState(false)
@@ -121,42 +122,22 @@ function CourseDetail() {
   const [recentlySavedNoteId, setRecentlySavedNoteId] = useState(null)
   const recentlySavedTimerRef = useRef(null)
 
-  const loadLocalNotes = () => {
-    const saved = localStorage.getItem(`notes-${id}`)
-    if (!saved) {
-      setNotes([])
-      setSelectedNoteId(null)
-      setIsComposerOpen(false)
-      return
-    }
-
-    const parsedNotes = JSON.parse(saved)
-    setNotes(Array.isArray(parsedNotes) ? parsedNotes : [])
-    setSelectedNoteId(null)
-    setIsComposerOpen(false)
-  }
-
-  const persistLocalNotes = (nextNotes) => {
-    localStorage.setItem(`notes-${id}`, JSON.stringify(nextNotes))
-  }
-
-  // LOAD NOTES (backend first; fallback to localStorage)
+  // LOAD NOTES (backend only)
   useEffect(() => {
     let cancelled = false
 
     async function loadNotes() {
-      setBackendCourseId(null)
+      setNotesError('')
+      setBackendCourseId(fallbackCourseId)
 
       try {
-        const userId = localStorage.getItem('lmsUserId')
-        if (!userId) throw new Error('Missing user id')
+        const resolvedCourseId = await resolveBackendCourseId(course)
+        const effectiveCourseId =
+          resolvedCourseId ||
+          import.meta.env.VITE_BACKEND_COURSE_ID ||
+          fallbackCourseId
 
-        const resolvedCourseId =
-          (await resolveBackendCourseId(course)) || import.meta.env.VITE_BACKEND_COURSE_ID || null
-
-        if (!resolvedCourseId) throw new Error('Missing backend course id')
-
-        const backendNotes = await listNotesByCourse(resolvedCourseId)
+        const backendNotes = await listNotesByCourse(effectiveCourseId)
         if (cancelled) return
 
         const mapped = backendNotes.map((n) => ({
@@ -169,15 +150,16 @@ function CourseDetail() {
           _raw: n,
         }))
 
-        setNotesSource('backend')
-        setBackendCourseId(resolvedCourseId)
+        setBackendCourseId(effectiveCourseId)
         setNotes(mapped)
         setSelectedNoteId(null)
         setIsComposerOpen(false)
-      } catch {
+      } catch (error) {
         if (cancelled) return
-        setNotesSource('local')
-        loadLocalNotes()
+        setNotes([])
+        setSelectedNoteId(null)
+        setIsComposerOpen(false)
+        setNotesError(error?.message || 'Unable to load notes from backend.')
       }
     }
 
@@ -185,7 +167,7 @@ function CourseDetail() {
     return () => {
       cancelled = true
     }
-  }, [id, course?.title])
+  }, [id, course?.title, fallbackCourseId])
 
   // VIDEO TRACKING
   useEffect(() => {
@@ -286,18 +268,15 @@ function CourseDetail() {
 
   const handleDeleteNote = (noteId) => {
     const run = async () => {
-      if (notesSource === 'backend') {
-        try {
-          await deleteNote(noteId)
-        } catch {
-          // keep UI unchanged on failure
-          return
-        }
+      try {
+        await deleteNote(noteId)
+      } catch (error) {
+        setNotesError(error?.message || 'Failed to delete note.')
+        return
       }
 
       setNotes((prev) => {
         const next = prev.filter((n) => n.id !== noteId)
-        if (notesSource === 'local') persistLocalNotes(next)
         return next
       })
 
@@ -315,7 +294,9 @@ function CourseDetail() {
 
   const handleSaveNote = () => {
     const saveToBackend = async ({ title, textContent, scene }) => {
-      if (!backendCourseId) throw new Error('Missing backend course')
+      const effectiveCourseId =
+        backendCourseId || import.meta.env.VITE_BACKEND_COURSE_ID || fallbackCourseId
+      if (!effectiveCourseId) throw new Error('Missing backend course')
 
       const anchorTimestampSeconds = Math.floor(Number(videoRef.current?.currentTime || 0))
 
@@ -338,7 +319,7 @@ function CourseDetail() {
       }
 
       const created = await createNote({
-        course: backendCourseId,
+        course: effectiveCourseId,
         title,
         textContent,
         drawingScene: scene,
@@ -374,73 +355,31 @@ function CourseDetail() {
     const now = new Date().toISOString()
 
     const run = async () => {
-      if (notesSource === 'backend') {
-        try {
-          const saved = await saveToBackend({ title, textContent: noteText, scene })
+      try {
+        const saved = await saveToBackend({ title, textContent: noteText, scene })
 
-          setNotes((prev) => {
-            const next = editingNoteId
-              ? prev.map((n) => (n.id === editingNoteId ? { ...n, ...saved } : n))
-              : [saved, ...prev]
-            return next
-          })
+        setNotes((prev) => {
+          const next = editingNoteId
+            ? prev.map((n) => (n.id === editingNoteId ? { ...n, ...saved } : n))
+            : [saved, ...prev]
+          return next
+        })
 
-          if (editingNoteId) {
-            setRecentlySavedNoteId(editingNoteId)
-          } else {
-            shouldScrollAfterCreateRef.current = true
-            setRecentlySavedNoteId(saved.id)
-          }
-        } catch {
-          setFormError('Failed to save note. Please try again.')
-          return
-        } finally {
-          setEditingNoteId(null)
-        }
-
-        if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
-        recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
-      } else {
         if (editingNoteId) {
-          // update existing note
-          setNotes((prev) => {
-            const updated = prev.map((n) =>
-              n.id === editingNoteId
-                ? { ...n, title, textContent: noteText, scene, lastSavedAt: now, _previous: { ...n } }
-                : n,
-            )
-            persistLocalNotes(updated)
-            return updated
-          })
-          setEditingNoteId(null)
-          // mark this note as recently saved so the inline indicator shows immediately
           setRecentlySavedNoteId(editingNoteId)
-          if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
-          recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
         } else {
-          const newNote = {
-            id: Date.now(),
-            title,
-            textContent: noteText,
-            scene,
-            createdAt: now,
-            lastSavedAt: now,
-            _action: 'created',
-          }
-
-          setNotes((prev) => {
-            const updated = [newNote, ...prev]
-            setSelectedNoteId(null)
-            persistLocalNotes(updated)
-            return updated
-          })
           shouldScrollAfterCreateRef.current = true
-          // ensure the newly created note shows the inline saved indicator
-          setRecentlySavedNoteId(newNote.id)
-          if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
-          recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
+          setRecentlySavedNoteId(saved.id)
         }
+      } catch (error) {
+        setFormError(error?.message || 'Failed to save note. Please try again.')
+        return
+      } finally {
+        setEditingNoteId(null)
       }
+
+      if (recentlySavedTimerRef.current) clearTimeout(recentlySavedTimerRef.current)
+      recentlySavedTimerRef.current = setTimeout(() => setRecentlySavedNoteId(null), 3200)
 
       setNoteTitle('')
       setNoteText('')
@@ -734,6 +673,7 @@ function CourseDetail() {
                     {notes.length > 0 && (
                       <section className={styles.notesRail}>
                         <p className={styles.railTitle}>All Notes</p>
+                        {notesError ? <p className={styles.formError}>{notesError}</p> : null}
 
                         <div className={styles.noteList}>
                           {notes.map((note) => (

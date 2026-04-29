@@ -10,13 +10,32 @@ const HandwrittenCanvas = forwardRef(function HandwrittenCanvas(
   const excalidrawAPIRef = useRef(null)
   const pendingSceneRef = useRef(null)
 
+  const normalizeScene = useCallback((scene) => {
+    const safeScene = scene && typeof scene === 'object' ? scene : {}
+    const nextElements = Array.isArray(safeScene.elements) ? safeScene.elements : []
+    const rawAppState =
+      safeScene.appState && typeof safeScene.appState === 'object' ? { ...safeScene.appState } : {}
+    const nextFiles = safeScene.files && typeof safeScene.files === 'object' ? safeScene.files : {}
+
+    // Excalidraw expects collaborators to be iterable (supports forEach).
+    if (rawAppState.collaborators && typeof rawAppState.collaborators.forEach !== 'function') {
+      rawAppState.collaborators = []
+    }
+
+    return {
+      elements: nextElements,
+      appState: rawAppState,
+      files: nextFiles,
+    }
+  }, [])
+
   const applySceneToApi = useCallback((api, scene, { preserveAppState = false } = {}) => {
     if (!api) return
 
-    const safeScene = scene && typeof scene === 'object' ? scene : null
-    const nextElements = Array.isArray(safeScene?.elements) ? safeScene.elements : []
+    const safeScene = normalizeScene(scene)
+    const nextElements = safeScene.elements
     const prevAppState = api.getAppState()
-    const sceneAppState = safeScene?.appState && typeof safeScene.appState === 'object' ? safeScene.appState : null
+    const sceneAppState = safeScene.appState
     const nextAppState = sceneAppState
       ? {
           ...(preserveAppState ? prevAppState : {}),
@@ -24,7 +43,7 @@ const HandwrittenCanvas = forwardRef(function HandwrittenCanvas(
           ...sceneAppState,
         }
       : prevAppState
-    const nextFiles = safeScene?.files && typeof safeScene.files === 'object' ? safeScene.files : {}
+    const nextFiles = safeScene.files
 
     api.updateScene({
       elements: nextElements,
@@ -35,7 +54,9 @@ const HandwrittenCanvas = forwardRef(function HandwrittenCanvas(
       },
       files: nextFiles,
     })
-  }, [])
+  }, [normalizeScene])
+
+  const normalizedInitialScene = normalizeScene(initialScene)
 
   const handleApiReady = useCallback((api) => {
     if (api && excalidrawAPIRef.current !== api) {
@@ -139,7 +160,7 @@ const HandwrittenCanvas = forwardRef(function HandwrittenCanvas(
       <div className={styles.canvasViewport} style={{ height: `${height}px` }}>
         <Excalidraw
           excalidrawAPI={handleApiReady}
-          initialData={initialScene}
+          initialData={normalizedInitialScene}
           onChange={(elements, appState, files) => {
             if (readOnly) return
             onSceneChange?.({

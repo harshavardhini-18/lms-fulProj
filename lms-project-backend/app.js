@@ -4,7 +4,7 @@ import cors from 'cors';
 import { attachUser, requireUser } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requireFields } from './middleware/validate.js';
-import { firebaseAdminSignIn, login } from './controllers/authController.js';
+import { firebaseAdminSignIn, login, register, forgotPassword, validateResetToken, resetPassword } from './controllers/authController.js';
 
 import authRoutes from './routes/authRoutes.js';
 import courseRoutes from './routes/courseRoutes.js';
@@ -18,10 +18,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(attachUser);
 
-// Public route: only login is accessible without authentication
+// Public routes: only these are accessible without authentication
 app.post('/login', requireFields('email', 'password'), login);
+app.post('/register', requireFields('email', 'password', 'fullName'), register);
+app.post('/api/auth/login', requireFields('email', 'password'), login);
+app.post('/api/auth/register', requireFields('email', 'password', 'fullName'), register);
 app.post('/api/auth/firebase/login', requireFields('idToken'), firebaseAdminSignIn);
 app.post('/api/auth/firebase/admin-login', requireFields('idToken'), firebaseAdminSignIn);
+app.post('/api/auth/forgot-password', requireFields('email'), forgotPassword);
+app.get('/api/auth/validate-reset-token', validateResetToken);
+app.post('/api/auth/reset-password', requireFields('email', 'token', 'newPassword'), resetPassword);
 
 // Guard all remaining routes
 app.use(requireUser);

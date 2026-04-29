@@ -1,7 +1,7 @@
 .page {
   min-height: calc(100vh - 84px);
   padding: 1.25rem;
-  background: linear-gradient(180deg, #f1f5ff 0%, #f8fafc 55%, #ffffff 100%);
+  background: #F5F7FB;
 }
 
 .container {
@@ -13,7 +13,7 @@
 
 .header {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 2px solid #E2E8F0;
   border-radius: 16px;
   padding: 1.1rem 1.15rem;
   box-shadow: 0 22px 70px -56px rgba(15, 23, 42, 0.5);
@@ -58,7 +58,7 @@
 
 .card {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 2px solid #E2E8F0;
   border-radius: 16px;
   padding: 1rem;
   box-shadow: 0 22px 70px -56px rgba(15, 23, 42, 0.5);

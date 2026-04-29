@@ -1,194 +1,102 @@
 import crypto from 'crypto';
 import AppError from '../utils/AppError.js';
-import { User } from '../models/index.js';
+import { pool } from '../config/postgres.js';
 import { getFirebaseAuth } from '../utils/firebaseAdmin.js';
+import { completePasswordReset, generatePasswordResetToken } from './passwordResetService.js';
+
+/* ---------------- CONFIG ---------------- */
 
 const SCRYPT_KEYLEN = 64;
-const ADMIN_MANAGED_ROLES = new Set(['student', 'staff', 'admin']);
+
+/* ---------------- PASSWORD HELPERS ---------------- */
 
 function hashPassword(password) {
 	return new Promise((resolve, reject) => {
 		const salt = crypto.randomBytes(16).toString('hex');
-		crypto.scrypt(password, salt, SCRYPT_KEYLEN, (err, derivedKey) => {
+
+		crypto.scrypt(password, salt, SCRYPT_KEYLEN, (err, key) => {
 			if (err) return reject(err);
-			return resolve(`${salt}:${derivedKey.toString('hex')}`);
+			resolve(`${salt}:${key.toString('hex')}`);
 		});
 	});
 }
 
-function verifyPassword(password, passwordHash) {
+function verifyPassword(password, hash) {
 	return new Promise((resolve, reject) => {
-		const [salt, key] = String(passwordHash || '').split(':');
+		if (!hash) return resolve(false);
+
+		const [salt, key] = hash.split(':');
 		if (!salt || !key) return resolve(false);
 
 		crypto.scrypt(password, salt, SCRYPT_KEYLEN, (err, derivedKey) => {
 			if (err) return reject(err);
 
-			const original = Buffer.from(key, 'hex');
-			const current = Buffer.from(derivedKey.toString('hex'), 'hex');
-			if (original.length !== current.length) return resolve(false);
-
-			return resolve(crypto.timingSafeEqual(original, current));
+			resolve(
+				crypto.timingSafeEqual(
+					Buffer.from(key, 'hex'),
+					derivedKey
+				)
+			);
 		});
 	});
 }
 
-function sanitizeUser(userDoc) {
-	const user = userDoc.toObject ? userDoc.toObject() : userDoc;
-	delete user.passwordHash;
+/* ---------------- SANITIZE ---------------- */
+
+function sanitizeUser(user) {
+	if (!user) return null;
+	delete user.password_hash;
 	return user;
 }
 
-function randomPasswordHash() {
-	const salt = crypto.randomBytes(16).toString('hex');
-	const key = crypto.randomBytes(64).toString('hex');
-	return `${salt}:${key}`;
+function roleNameFromRoleId(roleId) {
+	if (Number(roleId) === 1) return 'admin';
+	if (Number(roleId) === 2) return 'staff';
+	return 'student';
 }
 
-function getAdminEmailsAllowlist() {
-	const defaultAdmins = ['harsha@gmail.com'];
-	const envAdmins = String(process.env.FIREBASE_ADMIN_EMAILS || '')
-		.split(',')
-		.map((email) => email.trim().toLowerCase())
-		.filter(Boolean);
-
-	return new Set(
-		[...defaultAdmins, ...envAdmins]
-	);
-}
-
-function normalizeFirebaseProvider(provider) {
-	const value = String(provider || '').trim().toLowerCase();
-
-	if (value === 'google.com' || value === 'google') return 'google';
-	if (value === 'github.com' || value === 'github') return 'github';
-	if (value === 'apple.com' || value === 'apple') return 'apple';
-	if (value === 'password' || value === 'email' || value === 'custom') return 'local';
-
-	return 'local';
-}
-
-function normalizeAdminManagedRole(role) {
-	const normalized = String(role || '').trim().toLowerCase();
-	if (!ADMIN_MANAGED_ROLES.has(normalized)) {
-		throw new AppError('Invalid role. Allowed roles: student, staff, admin', 400);
-	}
-
-	return normalized;
-}
-
-function parseFirebaseError(error) {
-	const rawCode = error?.errorInfo?.code || error?.code || '';
-	const code = String(rawCode).toLowerCase();
-
-	if (code.includes('email-already-exists')) {
-		return new AppError('Email already exists in Firebase', 409);
-	}
-
-	if (code.includes('invalid-password') || code.includes('password')) {
-		return new AppError('Invalid password for Firebase user creation', 400);
-	}
-
-	if (code.includes('invalid-email')) {
-		return new AppError('Invalid email format', 400);
-	}
-
-	return null;
-}
-
-function deriveFullNameFromEmail(email) {
-	const localPart = String(email || '').split('@')[0] || 'user';
-	const normalized = localPart.replace(/[._-]+/g, ' ').trim();
-	if (!normalized) return 'LMS User';
-
-	return normalized
-		.split(' ')
-		.filter(Boolean)
-		.map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-		.join(' ')
-		.slice(0, 120);
-}
-
-export async function registerUser(payload) {
-	const { fullName, email, password } = payload;
-	const exists = await User.findOne({ email: email.toLowerCase() }).lean();
-	if (exists) throw new AppError('Email already registered', 409);
-
-	const passwordHash = await hashPassword(password);
-	const user = await User.create({
-		fullName,
-		email,
-		passwordHash,
-		role: payload.role || 'student',
-	});
-
-	return sanitizeUser(user);
-}
-
-export async function loginUser(payload) {
-	const { email, password } = payload;
-	const user = await User.findOne({ email: email.toLowerCase() }).select('+passwordHash');
-	if (!user) throw new AppError('Invalid credentials', 401);
-	if (user.status !== 'active') throw new AppError('User is not active', 403);
-
-	const valid = await verifyPassword(password, user.passwordHash);
-	if (!valid) throw new AppError('Invalid credentials', 401);
-
-	return sanitizeUser(user);
-}
-
-export async function getUserById(userId) {
-	const user = await User.findById(userId);
-	if (!user) throw new AppError('User not found', 404);
-	return sanitizeUser(user);
-}
+/* ---------------- FIREBASE LOGIN ---------------- */
 
 export async function firebaseAdminLogin(idToken) {
-	if (!idToken) throw new AppError('idToken is required', 400);
+	if (!idToken) throw new AppError('idToken required', 400);
 
-	const firebaseAuth = getFirebaseAuth();
-	const decoded = await firebaseAuth.verifyIdToken(idToken);
-	const email = String(decoded.email || '').trim().toLowerCase();
-
-	if (!email) {
-		throw new AppError('Firebase token has no email. Use an email-enabled provider.', 400);
+	const auth = getFirebaseAuth();
+	let decoded;
+	try {
+		decoded = await auth.verifyIdToken(idToken);
+	} catch {
+		throw new AppError('Invalid Firebase token. Please login again.', 401);
 	}
 
-	const allowlist = getAdminEmailsAllowlist();
-	const allowedByEmail = allowlist.has(email);
-	const fullName = String(decoded.name || email.split('@')[0] || 'LMS User').slice(0, 120);
-	const authProvider = normalizeFirebaseProvider(decoded.firebase?.sign_in_provider);
+	const email = decoded.email?.toLowerCase();
+	if (!email) throw new AppError('Email missing in token', 400);
 
-	let user = await User.findOne({ email });
+	const result = await pool.query(
+		`SELECT u.*
+		 FROM users u
+		 WHERE u.email = $1`,
+		[email]
+	);
 
-	if (!user) {
-		user = await User.create({
-			fullName,
-			email,
-			passwordHash: randomPasswordHash(),
-			role: allowedByEmail ? 'admin' : 'student',
-			authProvider,
-			isEmailVerified: Boolean(decoded.email_verified),
-			status: 'active',
-		});
-	} else {
-		if (user.status !== 'active') {
-			throw new AppError('User is not active', 403);
-		}
+	const user = result.rows[0];
 
-		if (allowedByEmail && user.role !== 'admin') {
-			user.role = 'admin';
-		}
+	if (!user) throw new AppError('User not found', 404);
+	if (user.status !== 'active') throw new AppError('User inactive', 403);
+	user.role = roleNameFromRoleId(user.role_id);
 
-		user.authProvider = authProvider;
-		if (decoded.email_verified) user.isEmailVerified = true;
-		if (!user.fullName && fullName) user.fullName = fullName;
-		await user.save();
+	// update firebase uid if missing
+	if (!user.firebase_uid) {
+		await pool.query(
+			`UPDATE users SET firebase_uid = $1 WHERE email = $2`,
+			[decoded.uid, email]
+		);
 	}
 
-	await firebaseAuth.setCustomUserClaims(decoded.uid, {
-		role: user.role,
-	});
+	try {
+		await auth.setCustomUserClaims(decoded.uid, { role: user.role });
+	} catch {
+		// non-blocking in local/dev
+	}
 
 	return {
 		user: sanitizeUser(user),
@@ -196,79 +104,189 @@ export async function firebaseAdminLogin(idToken) {
 	};
 }
 
-export async function createUserByAdmin(payload) {
-	const email = String(payload?.email || '').trim().toLowerCase();
-	const password = String(payload?.password || '').trim();
-	const role = normalizeAdminManagedRole(payload?.role);
-	const fullName = deriveFullNameFromEmail(email);
+/* ---------------- LOGIN ---------------- */
 
-	if (!email) {
-		throw new AppError('email is required', 400);
-	}
+export async function loginUser({ email, password }) {
+	const result = await pool.query(
+		`SELECT * FROM users WHERE email = $1`,
+		[email.toLowerCase()]
+	);
 
-	if (!password) {
-		throw new AppError('password is required', 400);
-	}
+	const user = result.rows[0];
 
-	if (password.length < 8) {
-		throw new AppError('Password must be at least 8 characters', 400);
-	}
+	if (!user) throw new AppError('Invalid credentials', 401);
+	if (user.status !== 'active') throw new AppError('User inactive', 403);
 
-	const existing = await User.findOne({ email }).lean();
-	if (existing) {
+	const valid = await verifyPassword(password, user.password_hash);
+
+	if (!valid) throw new AppError('Invalid credentials', 401);
+
+	return sanitizeUser(user);
+}
+
+/* ---------------- REGISTER ---------------- */
+
+export async function registerUser({ fullName, email, password }) {
+	email = email.toLowerCase().trim();
+
+	const exists = await pool.query(
+		`SELECT 1 FROM users WHERE email = $1`,
+		[email]
+	);
+
+	if (exists.rows.length > 0) {
 		throw new AppError('Email already registered', 409);
 	}
 
-	const firebaseAuth = getFirebaseAuth();
-	let firebaseUid = null;
+	const roleRes = await pool.query(
+		`SELECT id FROM roles WHERE role_name = 'student'`
+	);
 
-	try {
-		const firebaseUser = await firebaseAuth.createUser({
-			email,
-			password,
-			displayName: fullName,
-			emailVerified: false,
-			disabled: false,
-		});
-
-		firebaseUid = firebaseUser.uid;
-
-		await firebaseAuth.setCustomUserClaims(firebaseUid, { role });
-
-		const passwordHash = await hashPassword(password);
-		const user = await User.create({
-			fullName,
-			email,
-			passwordHash,
-			role,
-			authProvider: 'local',
-			isEmailVerified: false,
-			status: 'active',
-		});
-
-		return {
-			user: sanitizeUser(user),
-			firebaseUid,
-		};
-	} catch (error) {
-		if (firebaseUid) {
-			try {
-				await firebaseAuth.deleteUser(firebaseUid);
-			} catch {
-				// best-effort rollback
-			}
-		}
-
-		if (error instanceof AppError) {
-			throw error;
-		}
-
-		const firebaseError = parseFirebaseError(error);
-		if (firebaseError) {
-			throw firebaseError;
-		}
-
-		throw error;
+	if (!roleRes.rows[0]) {
+		throw new AppError('Student role missing', 500);
 	}
+
+	const passwordHash = await hashPassword(password);
+
+	const result = await pool.query(
+		`INSERT INTO users (full_name, email, password_hash, role_id, status)
+		 VALUES ($1, $2, $3, $4, 'active')
+		 RETURNING *`,
+		[fullName, email, passwordHash, roleRes.rows[0].id]
+	);
+
+	return sanitizeUser(result.rows[0]);
 }
 
+/* ---------------- GET USER ---------------- */
+
+export async function getUserById(userId) {
+	const result = await pool.query(
+		`SELECT u.*
+		 FROM users u
+		 WHERE u.id = $1`,
+		[userId]
+	);
+
+	if (!result.rows[0]) {
+		throw new AppError('User not found', 404);
+	}
+
+	const user = result.rows[0];
+	user.role = roleNameFromRoleId(user.role_id);
+	return sanitizeUser(user);
+}
+
+/* ---------------- ADMIN CREATE USER ---------------- */
+
+export async function createUserByAdmin(payload) {
+	const { fullName, email, password, role_id } = payload;
+
+	if (!email || !password || !role_id) {
+		throw new AppError('Missing required fields', 400);
+	}
+
+	const exists = await pool.query(
+		`SELECT 1 FROM users WHERE email = $1`,
+		[email.toLowerCase()]
+	);
+
+	if (exists.rows.length > 0) {
+		throw new AppError('User already exists', 409);
+	}
+
+	const hash = await hashPassword(password);
+
+	const result = await pool.query(
+		`INSERT INTO users (full_name, email, password_hash, role_id, status)
+		 VALUES ($1, $2, $3, $4, 'active')
+		 RETURNING *`,
+		[fullName, email.toLowerCase(), hash, role_id]
+	);
+
+	return sanitizeUser(result.rows[0]);
+}
+
+/* ---------------- UPDATE PROFILE ---------------- */
+
+export async function updateUserProfile(userId, payload) {
+	await pool.query(
+		`UPDATE users SET full_name = $1 WHERE id = $2`,
+		[payload.fullName, userId]
+	);
+
+	return { success: true };
+}
+
+/* ---------------- ONBOARDING ---------------- */
+
+export async function completeStudentOnboarding(userId, payload) {
+	await pool.query(
+		`UPDATE users SET
+		 first_name=$1,
+		 last_name=$2,
+		 phone=$3,
+		 department=$4,
+		 year_of_study=$5,
+		 college_name=$6,
+		 roll_no=$7,
+		 is_first_time=false
+		 WHERE id=$8`,
+		[
+			payload.firstName,
+			payload.lastName,
+			payload.phone,
+			payload.department,
+			payload.yearOfStudy,
+			payload.collegeName,
+			payload.rollNo,
+			userId,
+		]
+	);
+
+	return { success: true };
+}
+
+/* ---------------- PASSWORD RESET ---------------- */
+
+export async function requestPasswordReset(email, requestIp, userAgent) {
+	const emailLower = String(email || '').trim().toLowerCase();
+
+	if (!emailLower) {
+		throw new AppError('Email is required', 400);
+	}
+
+	const userResult = await pool.query(
+		`SELECT id FROM users WHERE email = $1 LIMIT 1`,
+		[emailLower]
+	);
+	const user = userResult.rows[0];
+
+	if (!user) {
+		return { userFound: false };
+	}
+
+	const resetData = await generatePasswordResetToken(
+		emailLower,
+		user.id,
+		requestIp,
+		userAgent
+	);
+
+	return {
+		userFound: true,
+		resetData,
+	};
+}
+
+export async function validateAndResetPassword(email, token, newPassword) {
+	if (!email || !token || !newPassword) {
+		throw new AppError('Email, token, and new password are required', 400);
+	}
+
+	if (String(newPassword).length < 8) {
+		throw new AppError('Password must be at least 8 characters', 400);
+	}
+
+	return completePasswordReset(email, token, newPassword);
+}

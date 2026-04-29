@@ -5,12 +5,17 @@ import Navbar from './components/Navbar'
 import Courses from './pages/Courses'
 import CourseDetail from './pages/CourseDetail'
 import Login from './pages/Login'
+import ResetPassword from './pages/ResetPassword'
 import AdminUsers from './pages/AdminUsers'
 import AdminDashboard from './pages/AdminDashboard'
-import AdminCoursesManagement from './pages/AdminCoursesManagement'
+import AdminCoursesManagement from './admin/pages/AdminCoursesManagement'
+import AdminAddCourse from './admin/pages/AdminAddCourse'
+import AdminCourseEditorNew from './admin/pages/AdminCourseEditorNew'
 import Reports from './pages/Reports'
 import StaffDashboard from './pages/StaffDashboard'
 import StudentHome from './pages/StudentHome'
+import StudentOnboarding from './pages/StudentOnboarding'
+import StudentProfile from './pages/StudentProfile'
 import { AuthProvider } from './auth/AuthContext'
 import { auth } from './firebase'
 import './App.css'
@@ -119,13 +124,14 @@ function App() {
 
         const payload = await response.json().catch(() => ({}))
         const backendUser = payload?.data?.user
+        const backendUserId = backendUser?.id ?? backendUser?._id
 
-        if (!response.ok || !backendUser?._id) {
+        if (!response.ok || !backendUserId) {
           throw new Error(payload?.message || 'Failed to sync user role')
         }
 
         const normalizedRole = String(backendUser.role || '').toLowerCase()
-        localStorage.setItem('lmsUserId', backendUser._id)
+        localStorage.setItem('lmsUserId', String(backendUserId))
         localStorage.setItem('lmsUserRole', normalizedRole)
         setAuthRole(normalizedRole || null)
       } catch {
@@ -139,7 +145,7 @@ function App() {
     return () => unsubscribe()
   }, [])
 
-  const showNavbar = location.pathname !== '/login'
+  const showNavbar = location.pathname !== '/login' && location.pathname !== '/reset'
   const normalizedRole = String(authRole || '').toLowerCase() || null
 
   return (
@@ -156,6 +162,10 @@ function App() {
                 <Login />
               </PublicOnlyRoute>
             }
+          />
+          <Route
+            path="/reset"
+            element={<ResetPassword />}
           />
           <Route
             path="/"
@@ -176,6 +186,14 @@ function App() {
           />
 
           {/* Student routes */}
+          <Route
+            path="/student/onboarding"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <StudentOnboarding />
+              </RoleOnlyRoute>
+            }
+          />
           <Route
             path="/student/home"
             element={
@@ -215,10 +233,7 @@ function App() {
             path="/student/profile"
             element={
               <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
-                <PlaceholderPage
-                  title="Your Profile"
-                  subtitle="Track your progress, certificates, and recommended next courses here."
-                />
+                <StudentProfile />
               </RoleOnlyRoute>
             }
           />
@@ -255,6 +270,22 @@ function App() {
             }
           />
           <Route
+            path="/admin/courses/add"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminAddCourse />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/courses/:courseId"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminCourseEditorNew />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
             path="/admin/reports"
             element={
               <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
@@ -285,6 +316,14 @@ function App() {
             element={
               <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
                 <AdminCoursesManagement />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/courses/:courseId"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <AdminCourseEditorNew />
               </RoleOnlyRoute>
             }
           />

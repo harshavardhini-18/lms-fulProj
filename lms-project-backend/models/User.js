@@ -7,7 +7,8 @@ const UserSchema = new Schema(
   {
     fullName: { type: String, required: true, trim: true, maxlength: 120 },
     email: { type: String, required: true, lowercase: true, trim: true, maxlength: 180 },
-    // passwordHash removed: password is managed by Firebase only
+    passwordHash: { type: String, default: null, select: false },
+    firebaseUid: { type: String, default: null, sparse: true, index: true },
     role: {
 			type: String,
 			enum: ['student', 'staff', 'instructor', 'admin'],
@@ -31,6 +32,18 @@ const UserSchema = new Schema(
 		profile: {
 			headline: { type: String, default: '', maxlength: 200 },
 			bio: { type: String, default: '', maxlength: 2000 },
+		},
+		// Onboarding fields (students only)
+		isFirstTime: { type: Boolean, default: true },
+		onboarding: {
+			firstName: { type: String, default: '', trim: true, maxlength: 60 },
+			lastName: { type: String, default: '', trim: true, maxlength: 60 },
+			phone: { type: String, default: '', trim: true, maxlength: 15 },
+			department: { type: String, default: '', trim: true, maxlength: 100 },
+			yearOfStudy: { type: String, default: '', maxlength: 20 },
+			collegeName: { type: String, default: '', trim: true, maxlength: 150 },
+			rollNo: { type: String, default: '', trim: true, maxlength: 50 },
+			completedAt: { type: Date },
 		},
 	},
 	{ timestamps: true, versionKey: false}
