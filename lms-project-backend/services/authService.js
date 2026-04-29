@@ -78,9 +78,30 @@ export async function firebaseAdminLogin(idToken) {
 		[email]
 	);
 
-	const user = result.rows[0];
+	let user = result.rows[0];
 
-	if (!user) throw new AppError('User not found', 404);
+	// Auto-provision a student user in PostgreSQL on first Firebase signup.
+	if (!user) {
+		const roleRes = await pool.query(
+			`SELECT id FROM roles WHERE role_name = 'student'`
+		);
+
+		if (!roleRes.rows[0]) {
+			throw new AppError('Student role missing in roles table', 500);
+		}
+
+		const fullName = (decoded.name || email.split('@')[0] || 'Student').toString().trim() || 'Student';
+
+		const inserted = await pool.query(
+			`INSERT INTO users (full_name, email, password_hash, role_id, status, firebase_uid, is_first_time)
+			 VALUES ($1, $2, NULL, $3, 'active', $4, TRUE)
+			 RETURNING *`,
+			[fullName, email, roleRes.rows[0].id, decoded.uid]
+		);
+
+		user = inserted.rows[0];
+	}
+
 	if (user.status !== 'active') throw new AppError('User inactive', 403);
 	user.role = roleNameFromRoleId(user.role_id);
 

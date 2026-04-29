@@ -3,7 +3,7 @@
   border: 1px solid #d7e2f1;
   border-radius: 12px;
   padding: 0.95rem;
-  min-height: auto;
+  min-height: calc(100vh - 32px);
   box-shadow: 0 8px 18px rgba(255, 255, 255, 0.07);
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '../firebase'
 import styles from './Login.module.css'
 
@@ -9,18 +9,66 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 function Login() {
   const navigate = useNavigate()
   const location = useLocation()
+
+  const [viewMode, setViewMode] = useState('login') // login | signup | forgot-password
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [viewMode, setViewMode] = useState('login') // 'login' or 'forgot-password'
+
   const [resetEmail, setResetEmail] = useState('')
   const [resetMessage, setResetMessage] = useState({ type: '', text: '' })
   const [resetLoading, setResetLoading] = useState(false)
 
   const redirectTo = location.state?.from && location.state?.from !== '/login' ? location.state.from : null
 
-  const handleSubmit = async (event) => {
+  const syncRoleAndNavigate = async (firebaseUser) => {
+    const idToken = await firebaseUser.getIdToken(true)
+
+    const backendResponse = await fetch(`${API_BASE_URL}/api/auth/firebase/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ idToken }),
+    })
+
+    const backendPayload = await backendResponse.json().catch(() => ({}))
+    const backendUser = backendPayload?.data?.user
+    const backendUserId = backendUser?.id ?? backendUser?._id
+
+    if (!backendResponse.ok || !backendUserId) {
+      localStorage.removeItem('lmsUserId')
+      localStorage.setItem('lmsUserRole', 'student')
+      localStorage.setItem('authToken', idToken)
+      navigate(redirectTo || '/student/home', { replace: true })
+      return
+    }
+
+    localStorage.setItem('lmsUserId', String(backendUserId))
+    const normalizedRole = String(backendUser.role || 'student').toLowerCase()
+    localStorage.setItem('lmsUserRole', normalizedRole)
+    localStorage.setItem('authToken', idToken)
+
+    if (normalizedRole === 'student' && backendUser.isFirstTime !== false) {
+      navigate('/student/onboarding', { replace: true })
+      return
+    }
+
+    const destination =
+      normalizedRole === 'admin'
+        ? '/admin/dashboard'
+        : normalizedRole === 'staff'
+          ? '/staff/dashboard'
+          : '/student/home'
+
+    navigate(redirectTo || destination, { replace: true })
+  }
+
+  const handleLoginSubmit = async (event) => {
     event.preventDefault()
 
     if (!email.trim() || !password.trim()) {
@@ -33,59 +81,7 @@ function Login() {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password)
-      const idToken = await userCredential.user.getIdToken(true)
-
-      const backendResponse = await fetch(`${API_BASE_URL}/api/auth/firebase/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          idToken,
-        }),
-      })
-
-      const backendPayload = await backendResponse.json().catch(() => ({}))
-      const backendUser = backendPayload?.data?.user
-      const backendUserId = backendUser?.id ?? backendUser?._id
-
-      if (!backendResponse.ok || !backendUserId) {
-        const tokenResult = await userCredential.user.getIdTokenResult()
-        const fallbackRole = String(tokenResult?.claims?.role || 'student').toLowerCase()
-        localStorage.removeItem('lmsUserId')
-        localStorage.setItem('lmsUserRole', fallbackRole)
-        const fallbackDestination =
-          fallbackRole === 'admin'
-            ? '/admin/dashboard'
-            : fallbackRole === 'staff'
-              ? '/staff/dashboard'
-              : '/student/home'
-        navigate(redirectTo || fallbackDestination, { replace: true })
-        return
-      }
-
-      localStorage.setItem('lmsUserId', String(backendUserId))
-      const normalizedRole = String(backendUser.role || '').toLowerCase()
-      localStorage.setItem('lmsUserRole', normalizedRole)
-
-      // Check if student needs onboarding
-      // Treat undefined isFirstTime as true (for existing users created before onboarding feature)
-      if (normalizedRole === 'student' && (backendUser.isFirstTime !== false)) {
-        navigate('/student/onboarding', { replace: true })
-        return
-      }
-
-      // Store auth token for future requests
-      localStorage.setItem('authToken', idToken)
-
-      const destination =
-        normalizedRole === 'admin'
-          ? '/admin/dashboard'
-          : normalizedRole === 'staff'
-            ? '/staff/dashboard'
-            : '/student/home'
-
-      navigate(redirectTo || destination, { replace: true })
+      await syncRoleAndNavigate(userCredential.user)
     } catch (error) {
       const code = error?.code || ''
       if (
@@ -104,13 +100,65 @@ function Login() {
     }
   }
 
+  const handleSignupSubmit = async (event) => {
+    event.preventDefault()
+
+    const normalizedEmail = email.trim().toLowerCase()
+
+    if (!normalizedEmail || !password.trim() || !confirmPassword.trim()) {
+      setErrorMessage('Please fill email, password, and confirm password.')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(normalizedEmail)) {
+      setErrorMessage('Please enter a valid email address.')
+      return
+    }
+
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters long.')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMessage('Password and confirm password do not match.')
+      return
+    }
+
+    setErrorMessage('')
+    setIsSubmitting(true)
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
+
+      // Enforce student role for self-signups.
+      localStorage.setItem('lmsUserRole', 'student')
+
+      await syncRoleAndNavigate(userCredential.user)
+    } catch (error) {
+      const code = error?.code || ''
+      if (code.includes('email-already-in-use')) {
+        setErrorMessage('This email is already registered. Please login instead.')
+      } else if (code.includes('weak-password')) {
+        setErrorMessage('Password is too weak. Use at least 6 characters.')
+      } else if (code.includes('invalid-email')) {
+        setErrorMessage('Please enter a valid email address.')
+      } else {
+        setErrorMessage(error?.message || 'Signup failed. Please try again.')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleForgotPasswordSubmit = async (event) => {
     event.preventDefault()
 
     if (!resetEmail.trim()) {
       setResetMessage({
         type: 'error',
-        text: '📧 Please enter your email address.',
+        text: 'Please enter your email address.',
       })
       return
     }
@@ -119,7 +167,7 @@ function Login() {
     if (!emailRegex.test(resetEmail.trim())) {
       setResetMessage({
         type: 'error',
-        text: '❌ Please enter a valid email address.',
+        text: 'Please enter a valid email address.',
       })
       return
     }
@@ -133,12 +181,10 @@ function Login() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          email: resetEmail.trim(),
-        }),
+        body: JSON.stringify({ email: resetEmail.trim() }),
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
         throw new Error(data.message || 'Failed to send reset email')
@@ -146,37 +192,40 @@ function Login() {
 
       setResetMessage({
         type: 'success',
-        text: `✅ Password reset email sent to ${resetEmail}. Check your inbox!`,
+        text: `Password reset email sent to ${resetEmail}. Check your inbox!`,
       })
 
-      // Auto-clear after 5 seconds
       setTimeout(() => {
         setResetEmail('')
         setResetMessage({ type: '', text: '' })
         setViewMode('login')
       }, 5000)
     } catch (error) {
-      let errorMsg = error.message || '❌ Failed to send reset email. Please try again.'
+      let errorMsg = error.message || 'Failed to send reset email. Please try again.'
 
       if (errorMsg.includes('Too many')) {
-        errorMsg = '⏳ Too many requests. Please try again later.'
+        errorMsg = 'Too many requests. Please try again later.'
       } else if (errorMsg.includes('invalid')) {
-        errorMsg = '❌ Invalid email address.'
+        errorMsg = 'Invalid email address.'
       }
 
-      setResetMessage({
-        type: 'error',
-        text: errorMsg,
-      })
+      setResetMessage({ type: 'error', text: errorMsg })
     } finally {
       setResetLoading(false)
     }
   }
 
+  const switchMode = (nextMode) => {
+    setViewMode(nextMode)
+    setEmail('')
+    setPassword('')
+    setConfirmPassword('')
+    setErrorMessage('')
+  }
+
   return (
     <section className={styles.wrapper}>
-      {/* LOGIN VIEW */}
-      {viewMode === 'login' && (
+      {(viewMode === 'login' || viewMode === 'signup') && (
         <div className={styles.loginShell}>
           <aside className={styles.heroPanel}>
             <div className={styles.heroGlow} aria-hidden="true" />
@@ -194,13 +243,18 @@ function Login() {
 
           <div className={styles.card}>
             <p className={styles.eyebrow}>LMS Platform</p>
-            <h1 className={styles.title}>Login</h1>
-            <p className={styles.subtitle}>Sign in to continue to your course dashboard.</p>
+            <h1 className={styles.title}>{viewMode === 'signup' ? 'Create Account' : 'Login'}</h1>
+            <p className={styles.subtitle}>
+              {viewMode === 'signup'
+                ? 'Sign up as a student with your email and password.'
+                : 'Sign in to continue to your course dashboard.'}
+            </p>
 
-            <form className={styles.form} onSubmit={handleSubmit}>
-              <label htmlFor="login-email" className={styles.label}>
-                Email
-              </label>
+            <form
+              className={styles.form}
+              onSubmit={viewMode === 'signup' ? handleSignupSubmit : handleLoginSubmit}
+            >
+              <label htmlFor="login-email" className={styles.label}>Email</label>
               <input
                 id="login-email"
                 className={styles.input}
@@ -211,9 +265,7 @@ function Login() {
                 autoComplete="email"
               />
 
-              <label htmlFor="login-password" className={styles.label}>
-                Password
-              </label>
+              <label htmlFor="login-password" className={styles.label}>Password</label>
               <input
                 id="login-password"
                 className={styles.input}
@@ -221,40 +273,82 @@ function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
+                autoComplete={viewMode === 'signup' ? 'new-password' : 'current-password'}
               />
+              {viewMode === 'signup' && (
+                <p className={styles.fieldHint}>
+                  Use 6 or more characters with a mix of letters, numbers &amp; symbols.
+                </p>
+              )}
 
-              <div className={styles.passwordActions}>
-                <button
-                  type="button"
-                  className={styles.forgotPasswordLink}
-                  onClick={() => setViewMode('forgot-password')}
-                >
-                  Forgot password?
-                </button>
-              </div>
+              {viewMode === 'signup' && (
+                <>
+                  <label htmlFor="confirm-password" className={styles.label}>Repeat Password</label>
+                  <input
+                    id="confirm-password"
+                    className={styles.input}
+                    type="password"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                  />
+                </>
+              )}
+
+              {viewMode === 'login' && (
+                <div className={styles.passwordActions}>
+                  <button
+                    type="button"
+                    className={styles.forgotPasswordLink}
+                    onClick={() => setViewMode('forgot-password')}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
 
               <button className={styles.button} type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Signing in...' : 'Login'}
+                {isSubmitting
+                  ? viewMode === 'signup'
+                    ? 'Creating account...'
+                    : 'Signing in...'
+                  : viewMode === 'signup'
+                    ? 'Create Account'
+                    : 'Login'}
               </button>
 
               {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
+
+              <div className={styles.modeToggleRow}>
+                {viewMode === 'signup' ? (
+                  <p>
+                    Already have an account?{' '}
+                    <button type="button" className={styles.modeLink} onClick={() => switchMode('login')}>
+                      Login
+                    </button>
+                  </p>
+                ) : (
+                  <p>
+                    New student?{' '}
+                    <button type="button" className={styles.modeLink} onClick={() => switchMode('signup')}>
+                      Create new account
+                    </button>
+                  </p>
+                )}
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* FORGOT PASSWORD VIEW */}
       {viewMode === 'forgot-password' && (
         <div className={styles.card}>
-        
           <h1 className={styles.title}>Reset Password</h1>
           <p className={styles.subtitle}>Enter your email address and we'll send you a link to reset your password.</p>
 
           <form className={styles.form} onSubmit={handleForgotPasswordSubmit}>
-            <label htmlFor="reset-email" className={styles.label}>
-              Email Address
-            </label>
+            <label htmlFor="reset-email" className={styles.label}>Email Address</label>
             <input
               id="reset-email"
               type="email"
@@ -266,12 +360,8 @@ function Login() {
               autoComplete="email"
             />
 
-            <button
-              type="submit"
-              className={styles.button}
-              disabled={resetLoading}
-            >
-              {resetLoading ? '⏳ Sending...' : ' Send Reset Email'}
+            <button type="submit" className={styles.button} disabled={resetLoading}>
+              {resetLoading ? 'Sending...' : 'Send Reset Email'}
             </button>
 
             {resetMessage.text && (
@@ -289,7 +379,7 @@ function Login() {
                 setResetMessage({ type: '', text: '' })
               }}
             >
-              ← Back to Login
+              Back to Login
             </button>
           </form>
         </div>

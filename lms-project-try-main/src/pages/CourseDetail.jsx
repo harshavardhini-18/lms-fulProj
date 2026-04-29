@@ -28,8 +28,6 @@ const defaultTimedQuiz = {
   ],
 }
 
-const TABS = ['Activity', 'Summary', 'Notes']
-
 const EMPTY_SCENE = {
   elements: [],
   appState: {
@@ -86,7 +84,7 @@ function CourseDetail() {
   const { id } = useParams()
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
-  const tabRowRef = useRef(null)
+  const composerRef = useRef(null)
   const shouldScrollAfterCreateRef = useRef(false)
 
   const course = useMemo(
@@ -102,7 +100,6 @@ function CourseDetail() {
   const [activeLessonIndex, setActiveLessonIndex] = useState(0)
   const [isQuizVisible, setIsQuizVisible] = useState(false)
   const [isQuizCompleted, setIsQuizCompleted] = useState(false)
-  const [activeTab, setActiveTab] = useState('Summary')
 
   const [notes, setNotes] = useState([])
   const [selectedNoteId, setSelectedNoteId] = useState(null)
@@ -190,24 +187,34 @@ function CourseDetail() {
   }, [lessons, timedQuiz, isQuizCompleted])
 
   useEffect(() => {
-    if (activeTab !== 'Notes') return
-    if (!tabRowRef.current) return
-
-    const y = tabRowRef.current.getBoundingClientRect().top + window.scrollY - 20
-    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
-  }, [activeTab])
-
-  useEffect(() => {
     if (!shouldScrollAfterCreateRef.current) return
-    if (activeTab !== 'Notes') return
 
     shouldScrollAfterCreateRef.current = false
     window.requestAnimationFrame(() => {
       window.scrollBy({ top: -72, behavior: 'smooth' })
     })
-  }, [notes, activeTab])
+  }, [notes])
 
-  // cleanup for any pending composer save timeout
+  useEffect(() => {
+    setIsComposerOpen(false)
+    setEditingNoteId(null)
+    setSelectedNoteId(null)
+    setNoteTitle('')
+    setNoteText('')
+    setFormError('')
+  }, [id])
+
+  useEffect(() => {
+    if (!isComposerOpen) return
+    const raf = requestAnimationFrame(() => {
+      const node = composerRef.current
+      if (!node) return
+      const top = node.getBoundingClientRect().top + window.scrollY - 24
+      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [isComposerOpen])
+
   useEffect(() => {
     return () => {
       if (saveBtnTimeoutRef.current) clearTimeout(saveBtnTimeoutRef.current)
@@ -351,8 +358,6 @@ function CourseDetail() {
       setFormError('Add text or drawing to save this note.')
       return
     }
-
-    const now = new Date().toISOString()
 
     const run = async () => {
       try {
@@ -526,12 +531,33 @@ function CourseDetail() {
   return (
     <section className={styles.page}>
       <div className={styles.mainContainer}>
+        {/* LEFT (ToC) */}
+        <div className={styles.tocPanel}>
+          <TableOfContents
+            lessons={lessons}
+            modules={modules}
+            activeLessonIndex={activeLessonIndex}
+            onLessonSelect={(i, t) => {
+              videoRef.current.currentTime = t
+              videoRef.current.play()
+            }}
+          />
+        </div>
 
-        {/* LEFT */}
+        {/* RIGHT (content) */}
         <div className={styles.leftColumn}>
 
           <div className={styles.titleBlock}>
-            <h1 className={styles.courseTitleCentered}>{course.title}</h1>
+            <div className={styles.titleRow}>
+              <h1 className={styles.courseTitleCentered}>{course.title}</h1>
+              <button
+                type="button"
+                className={styles.addNoteFloating}
+                onClick={handleStartNewNote}
+              >
+                Add Note
+              </button>
+            </div>
           </div>
 
           <VideoPlayer ref={videoRef} src={course.videoUrl}>
@@ -547,160 +573,163 @@ function CourseDetail() {
             )}
           </VideoPlayer>
 
-          {/* TABS */}
-          <div ref={tabRowRef} className={styles.tabRow}>
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                className={`${styles.tabButton} ${activeTab === tab ? styles.activeTab : ''}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+          <article className={styles.articleBody}>
+            <h2 className={styles.articleHeading}>Why {course.title} matters</h2>
+            <p>
+              {course.title} is one of the most in-demand skills today. Teams use it
+              every day to ship faster, make better decisions, and build reliable
+              products. Learning it gives you a clear edge in real projects, interviews,
+              and on-the-job problem solving.
+            </p>
 
-          {activeTab === 'Summary' && (
-            <div className={styles.summaryCard}>
-              <p className={styles.summaryBody}>{course.description}</p>
-            </div>
-          )}
+            {lessons.length > 0 && (
+              <>
+                <h2 className={styles.articleHeading}>Key concepts in this course</h2>
+                <ul className={styles.bulletList}>
+                  {lessons.map((lesson) => (
+                    <li key={`learn-${lesson.title}-${lesson.startSeconds}`}>
+                      <strong>{lesson.title}</strong>
+                      {' — a focused walkthrough that builds practical, hands-on intuition.'}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
 
-          {/* NOTES */}
-          {activeTab === 'Notes' && (
+            <h2 className={styles.articleHeading}>What you’ll be able to do</h2>
+            <ul className={styles.bulletList}>
+              <li>Apply core {course.title} concepts to real-world scenarios with confidence.</li>
+              <li>Break down complex problems into clear, structured steps.</li>
+              <li>Communicate your work and results clearly to teammates and stakeholders.</li>
+              <li>Build a portfolio-ready outcome you can showcase on your resume.</li>
+            </ul>
+
+            {course.image && (
+              <figure className={styles.articleFigure}>
+                <img src={course.image} alt={course.title} loading="lazy" />
+                <figcaption>{course.title} — quick visual reference.</figcaption>
+              </figure>
+            )}
+
+            <h2 className={styles.articleHeading}>How this course is structured</h2>
+            <p>
+              The course is organised into short, focused lessons that build on each
+              other. Each lesson introduces one clear idea, walks through a small
+              hands-on example, and ends with a short recap so concepts stay sticky.
+              You can follow the lessons in order, or use the Table of Contents on
+              the left to jump to any topic that interests you.
+            </p>
+            <p>
+              As you progress, take notes on patterns you find tricky and revisit
+              earlier lessons whenever a concept feels shaky — repetition is what
+              turns these ideas from theory into instinct. By the end you should be
+              able to explain the core ideas in your own words and apply them to a
+              small project of your own.
+            </p>
+
+          </article>
+
+
+          {(isComposerOpen || notes.length > 0) && (
             <div className={styles.notesWrapper}>
-              {notes.length === 0 && !isComposerOpen ? (
-                <div className={styles.notesEmptyCenterWrap}>
-                  <div className={styles.notesEmptyMessage}>
-                    <p className={styles.notesEmptyTitle}>No previous notes</p>
-                    <p className={styles.notesEmptyHint}>Click below to add a new note.</p>
-                  </div>
-                  <button type="button" className={styles.addNewBtnCenter} onClick={handleStartNewNote}>
-                    Add New Note
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className={styles.notesTopBar}>
-                   
-                    <button type="button" className={styles.addNewBtn} onClick={handleStartNewNote}>
-                       Add Note
-                    </button>
-                  </div>
+              <div className={styles.notesSingleColumn}>
+                {isComposerOpen && (
+                    <div ref={composerRef} className={styles.noteFormCard}>
+                      <label htmlFor="note-title" className={styles.label}>Title</label>
+                      <input
+                        id="note-title"
+                        className={styles.titleInput}
+                        value={noteTitle}
+                        onChange={(event) => setNoteTitle(event.target.value)}
+                        placeholder="Example: Blockchain consensus diagram"
+                      />
 
-                  <div className={styles.notesSingleColumn}>
-                    {isComposerOpen && (
-                      <div className={styles.noteFormCard}>
-                        <label htmlFor="note-title" className={styles.label}>Title</label>
-                        <input
-                          id="note-title"
-                          className={styles.titleInput}
-                          value={noteTitle}
-                          onChange={(event) => setNoteTitle(event.target.value)}
-                          placeholder="Example: Blockchain consensus diagram"
-                        />
-
-                        <div className={styles.drawLabelRow}>
-                          <p className={styles.label}>Editor Mode</p>
-                          <p className={styles.drawHint}>Pick Text or Draw before writing your note.</p>
-                        </div>
-
-                        <div className={styles.modeToggleRow}>
-                          <button
-                            type="button"
-                            className={`${styles.modeToggleBtn} ${editorMode === 'text' ? styles.modeToggleBtnActive : ''}`}
-                            onClick={() => {
-                              setEditorMode('text')
-                            }}
-                          >
-                            Text
-                          </button>
-                          <button
-                            type="button"
-                            className={`${styles.modeToggleBtn} ${editorMode === 'draw' ? styles.modeToggleBtnActive : ''}`}
-                            onClick={() => {
-                              setEditorMode('draw')
-                              canvasRef.current?.setTool?.('freedraw')
-                            }}
-                          >
-                            Draw
-                          </button>
-                        </div>
-
-                        <div className={editorMode === 'text' ? '' : styles.hiddenEditor}>
-                          <textarea
-                            className={styles.textEditor}
-                            value={noteText}
-                            onChange={(event) => setNoteText(event.target.value)}
-                            placeholder="Start typing your note..."
-                          />
-                        </div>
-
-                        <div className={`${styles.canvasArea} ${editorMode === 'draw' ? '' : styles.hiddenEditor}`}>
-                          <HandwrittenCanvas
-                            key={`composer-canvas-${editingNoteId || 'new'}`}
-                            ref={canvasRef}
-                            initialScene={composerInitialScene}
-                            activeTool="freedraw"
-                            height={520}
-                          />
-                        </div>
-
-                        {formError && <p className={styles.formError}>{formError}</p>}
-
-                        <div className={styles.noteActions}>
-                          <button
-                            type="button"
-                            className={styles.secondaryBtn}
-                            onClick={() => {
-                              setIsComposerOpen(false)
-                              setNoteText('')
-                              setFormError('')
-                              if (canvasRef.current) {
-                                canvasRef.current.clearCanvas()
-                              }
-                            }}
-                          >
-                            Cancel
-                          </button>
-                          <button type="button" className={styles.addNoteBtn} onClick={handleSaveNote}>
-                            {saveBtnSaved ? 'Saved ✓' : 'Save Note'}
-                          </button>
-                        </div>
+                      <div className={styles.drawLabelRow}>
+                        <p className={styles.label}>Editor Mode</p>
+                        <p className={styles.drawHint}>Pick Text or Draw before writing your note.</p>
                       </div>
-                    )}
 
-                    {notes.length > 0 && (
-                      <section className={styles.notesRail}>
-                        <p className={styles.railTitle}>All Notes</p>
-                        {notesError ? <p className={styles.formError}>{notesError}</p> : null}
+                      <div className={styles.modeToggleRow}>
+                        <button
+                          type="button"
+                          className={`${styles.modeToggleBtn} ${editorMode === 'text' ? styles.modeToggleBtnActive : ''}`}
+                          onClick={() => {
+                            setEditorMode('text')
+                          }}
+                        >
+                          Text
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.modeToggleBtn} ${editorMode === 'draw' ? styles.modeToggleBtnActive : ''}`}
+                          onClick={() => {
+                            setEditorMode('draw')
+                            canvasRef.current?.setTool?.('freedraw')
+                          }}
+                        >
+                          Draw
+                        </button>
+                      </div>
 
-                        <div className={styles.noteList}>
-                          {notes.map((note) => (
-                            <NoteItem key={note.id} note={note} recentlySavedNoteId={recentlySavedNoteId} />
-                          ))}
-                        </div>
-                      </section>
-                    )}
-                  </div>
-                </>
-              )}
+                      <div className={editorMode === 'text' ? '' : styles.hiddenEditor}>
+                        <textarea
+                          className={styles.textEditor}
+                          value={noteText}
+                          onChange={(event) => setNoteText(event.target.value)}
+                          placeholder="Start typing your note..."
+                        />
+                      </div>
+
+                      <div className={`${styles.canvasArea} ${editorMode === 'draw' ? '' : styles.hiddenEditor}`}>
+                        <HandwrittenCanvas
+                          key={`composer-canvas-${editingNoteId || 'new'}`}
+                          ref={canvasRef}
+                          initialScene={composerInitialScene}
+                          activeTool="freedraw"
+                          height={520}
+                        />
+                      </div>
+
+                      {formError && <p className={styles.formError}>{formError}</p>}
+
+                      <div className={styles.noteActions}>
+                        <button
+                          type="button"
+                          className={styles.secondaryBtn}
+                          onClick={() => {
+                            setIsComposerOpen(false)
+                            setNoteText('')
+                            setFormError('')
+                            if (canvasRef.current) {
+                              canvasRef.current.clearCanvas()
+                            }
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button type="button" className={styles.addNoteBtn} onClick={handleSaveNote}>
+                          {saveBtnSaved ? 'Saved ✓' : 'Save Note'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                {notes.length > 0 && (
+                  <section className={styles.notesRail}>
+                    <p className={styles.railTitle}>All Notes</p>
+                    {notesError ? <p className={styles.formError}>{notesError}</p> : null}
+
+                    <div className={styles.noteList}>
+                      {notes.map((note) => (
+                        <NoteItem key={note.id} note={note} recentlySavedNoteId={recentlySavedNoteId} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
             </div>
           )}
 
-        </div>
-
-        {/* RIGHT */}
-        <div className={styles.tocPanel}>
-          <TableOfContents
-            lessons={lessons}
-            modules={modules}
-            activeLessonIndex={activeLessonIndex}
-            onLessonSelect={(i, t) => {
-              videoRef.current.currentTime = t
-              videoRef.current.play()
-            }}
-          />
         </div>
 
       </div>
