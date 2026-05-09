@@ -3,6 +3,7 @@ import {
   createCourse, 
   getCourseById, 
   listCourses,
+  getCourseCountsMap,
   getCourseWithModules,
   getModule,
   getLesson,
@@ -24,6 +25,11 @@ export const create = asyncHandler(async (req, res) => {
 export const list = asyncHandler(async (req, res) => {
   const courses = await listCourses(req.query);
   res.json({ success: true, data: courses });
+});
+
+export const countsMap = asyncHandler(async (req, res) => {
+  const data = await getCourseCountsMap();
+  res.json({ success: true, data });
 });
 
 export const getById = asyncHandler(async (req, res) => {

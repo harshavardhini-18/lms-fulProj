@@ -1,44 +1,90 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import CourseCard from '../components/CourseCard'
 import BootcampGrid from '../components/BootcampGrid'
-import { courses } from '../data/coursesData'
+import { listBackendCourses } from '../api/courses'
 import styles from './Courses.module.css'
 
-const courseMetaById = {
-  1: { domain: 'Data Science', topic: 'SST-NSET', courseType: 'Free', level: 'Intermediate' },
-  2: { domain: 'Software Engineering', topic: 'NodeJS', courseType: 'Free', level: 'Advanced' },
-  3: { domain: 'Software Engineering', topic: 'Beginner', courseType: 'Free', level: 'Beginner' },
-  4: { domain: 'Data Science', topic: 'React', courseType: 'Paid', level: 'Intermediate' },
-  5: { domain: 'Software Engineering', topic: 'React', courseType: 'Free', level: 'Beginner' },
-  6: { domain: 'Software Engineering', topic: 'NodeJS', courseType: 'Paid', level: 'Intermediate' },
-  7: { domain: 'Software Engineering', topic: 'SST-NSET', courseType: 'Paid', level: 'Advanced' },
-  8: { domain: 'Data Science', topic: 'Data Analytics', courseType: 'Free', level: 'Advanced' },
-}
 const PAGE_SIZE = 8
 
 function Courses() {
+  const [courses, setCourses] = useState([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedDomain, setSelectedDomain] = useState('All')
   const [selectedLevel, setSelectedLevel] = useState('All')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCourses() {
+      try {
+        setLoading(true)
+        const backendCourses = await listBackendCourses()
+        if (cancelled) return
+        const publishedOnly = Array.isArray(backendCourses)
+          ? backendCourses.filter((course) => String(course?.status || '').toLowerCase() === 'published')
+          : []
+        setCourses(publishedOnly)
+      } catch {
+        if (cancelled) return
+        setCourses([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadCourses()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const deriveDuration = (course) => {
+    const totalSeconds = Number(course?.totalVideoDuration || 0)
+    if (Number.isFinite(totalSeconds) && totalSeconds > 0) {
+      const hrs = Math.max(1, Math.round(totalSeconds / 3600))
+      return `${hrs} Hrs`
+    }
+    return 'Self paced'
+  }
+
+  const getTopicTag = (title = '') => {
+    const t = String(title).toLowerCase()
+    if (t.includes('react')) return 'React'
+    if (t.includes('node')) return 'NodeJS'
+    if (t.includes('data')) return 'Data Analytics'
+    if (t.includes('python')) return 'Python'
+    return 'Beginner'
+  }
+
   const enrichedCourses = useMemo(
     () =>
       courses.map((course) => {
-        const meta = courseMetaById[course.id] ?? {
-          domain: 'Software Engineering',
-          topic: 'Beginner',
-          courseType: 'Free',
-          level: 'Beginner',
-        }
+        const modules = Array.isArray(course.modules) ? course.modules : []
+        const lessonCountFromModules = modules.reduce(
+          (sum, m) => sum + (Array.isArray(m.lessons) ? m.lessons.length : 0),
+          0
+        )
+        const lessonCount = Number(course.lessonCount ?? course.lesson_count)
 
         return {
-          ...course,
-          ...meta,
-          lessonCount: course.lessons?.length ?? 0,
+          id: String(course._id || course.id),
+          title: course.title || 'Untitled course',
+          description: course.description || '',
+          image: course.thumbnailUrl || course.bannerUrl || '',
+          duration: deriveDuration(course),
+          level: course.level || 'Beginner',
+          domain: String(course.tags?.[0] || 'Software Engineering'),
+          topic: getTopicTag(course.title),
+          lessonCount:
+            Number.isFinite(lessonCount) && lessonCount >= 0
+              ? lessonCount
+              : lessonCountFromModules,
+          modules,
         }
       }),
-    [],
+    [courses],
   )
 
   const filterOptions = useMemo(() => {
@@ -164,10 +210,14 @@ function Courses() {
             </label>
           </div>
 
-          {filteredCourses.length === 0 ? (
+          {loading ? (
+            <div className={styles.emptyState}>
+              <h3>Loading courses...</h3>
+            </div>
+          ) : filteredCourses.length === 0 ? (
             <div className={styles.emptyState}>
               <h3>No courses match your search</h3>
-              <p>Try removing some filters or searching with broader keywords.</p>
+              <p>Only admin-added courses are shown here.</p>
             </div>
           ) : (
             <div className={styles.gridShell}>

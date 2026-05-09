@@ -17,6 +17,38 @@
   background: #000;
 }
 
+.videoIframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  border: 0;
+  background: #000;
+}
+
+.videoUnavailable {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 24px;
+  background: linear-gradient(150deg, #0f172a, #1e293b);
+}
+
+.videoUnavailableTitle {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.videoUnavailableHint {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
 .overlayLayer {
   position: absolute;
   inset: 0;

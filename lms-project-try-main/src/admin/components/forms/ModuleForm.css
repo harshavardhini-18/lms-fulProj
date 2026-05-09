@@ -1,74 +1,123 @@
-.module-form {
-  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+.mf-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
 }
 
-.module-form .form-section {
-  padding: 18px;
-  background: #ffffff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
+.mf-section {
+  padding: 24px 28px;
+  background: #fff;
 }
 
-.module-form .form-section h3 {
-  margin: 0 0 16px;
-  font-size: 20px;
+.mf-section-title {
+  font-size: 12px;
   font-weight: 700;
-  color: #0f172a;
-  text-transform: none;
-  letter-spacing: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  margin: 0 0 18px;
 }
 
-.module-form .form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.mf-field {
   margin-bottom: 16px;
 }
 
-.module-form .form-group:last-child {
+.mf-field:last-child {
   margin-bottom: 0;
 }
 
-.module-form .form-group label {
+.mf-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 13px;
   font-weight: 600;
-  color: #1e293b;
+  color: #475569;
+  margin-bottom: 6px;
 }
 
-.module-form .form-input,
-.module-form .form-textarea {
-  padding: 11px 12px;
-  font-size: 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-family: inherit;
-  transition: all 0.2s;
-  color: #0f172a;
-}
-
-.module-form .form-input:focus,
-.module-form .form-textarea:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
-}
-
-.module-form .form-textarea {
-  resize: vertical;
-  min-height: 72px;
-}
-
-.module-form small {
+.mf-required {
+  color: #ef4444;
   font-size: 12px;
-  color: #64748b;
 }
 
-.module-form .form-actions {
+.mf-char-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: #7c8ba1;
+}
+
+.mf-input,
+.mf-textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: #0f172a;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.mf-input:focus,
+.mf-textarea:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+}
+
+.mf-input::placeholder,
+.mf-textarea::placeholder {
+  color: #94a3b8;
+}
+
+.mf-textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.mf-actions {
   display: flex;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid #e8e8e8;
+  justify-content: flex-end;
+  padding: 16px 28px 24px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.mf-save-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #1e293b;
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.mf-save-btn:hover:not(:disabled) {
+  background: #0f172a;
+  transform: translateY(-1px);
+}
+
+.mf-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mf-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: mf-spin 0.6s linear infinite;
+}
+
+@keyframes mf-spin {
+  to { transform: rotate(360deg); }
 }

@@ -3,6 +3,7 @@ import {
   create,
   getById,
   list,
+  countsMap,
   getCourseDetail,
   getModuleDetail,
   getLessonDetail,
@@ -23,6 +24,7 @@ const router = Router();
 router.use(requireUser);
 
 router.get('/', list);
+router.get('/counts', countsMap);
 router.get('/:courseId/detail', getCourseDetail);
 router.get('/:courseId', getById);
 router.post('/', requireFields('title'), create);

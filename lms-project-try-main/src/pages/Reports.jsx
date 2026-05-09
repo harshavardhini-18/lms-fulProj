@@ -1,12 +1,8 @@
-function Reports() {
-  return (
-    <section className="placeholderPage">
-      <p className="eyebrow">Reports</p>
-      <h1>Reports</h1>
-      <p>Reporting dashboard (coming soon).</p>
-    </section>
-  )
+import { Navigate, useLocation } from 'react-router-dom'
+
+/** Legacy route: lesson editing lives under Courses Management. */
+export default function Reports() {
+  const { pathname } = useLocation()
+  const to = pathname.startsWith('/staff') ? '/staff/courses' : '/admin/courses'
+  return <Navigate to={to} replace />
 }
-
-export default Reports
-

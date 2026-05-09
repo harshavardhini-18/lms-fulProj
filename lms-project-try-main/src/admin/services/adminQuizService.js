@@ -1,43 +1,71 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 const getAxiosInstance = () => {
   const token = localStorage.getItem('accessToken');
+  const userId = localStorage.getItem('lmsUserId') || '1';
   return axios.create({
     baseURL: API_BASE_URL,
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'x-user-id': userId,
+      'Content-Type': 'application/json',
+    },
   });
 };
 
+function toServiceError(error, fallbackMessage) {
+  const apiMessage = error?.response?.data?.message;
+  const details = Array.isArray(error?.response?.data?.details)
+    ? error.response.data.details.join(', ')
+    : '';
+  return new Error(apiMessage || details || fallbackMessage);
+}
+
 export const adminQuizService = {
-  getAllQuizzes: async () => {
-    const instance = getAxiosInstance();
-    const response = await instance.get('/quizzes');
-    return response.data;
+  listByCourse: async (courseId) => {
+    try {
+      const res = await getAxiosInstance().get(`/quizzes/course/${courseId}`);
+      return res.data?.data ?? res.data ?? [];
+    } catch (error) {
+      throw toServiceError(error, 'Failed to load quizzes');
+    }
   },
 
-  getQuiz: async (quizId) => {
-    const instance = getAxiosInstance();
-    const response = await instance.get(`/quizzes/${quizId}`);
-    return response.data;
+  getById: async (quizId) => {
+    try {
+      const res = await getAxiosInstance().get(`/quizzes/${quizId}`);
+      return res.data?.data ?? res.data;
+    } catch (error) {
+      throw toServiceError(error, 'Failed to load quiz');
+    }
   },
 
-  createQuiz: async (data) => {
-    const instance = getAxiosInstance();
-    const response = await instance.post('/quizzes', data);
-    return response.data;
+  create: async (payload) => {
+    try {
+      const res = await getAxiosInstance().post('/quizzes', payload);
+      return res.data?.data ?? res.data;
+    } catch (error) {
+      throw toServiceError(error, 'Failed to create quiz');
+    }
   },
 
-  updateQuiz: async (quizId, data) => {
-    const instance = getAxiosInstance();
-    const response = await instance.put(`/quizzes/${quizId}`, data);
-    return response.data;
+  update: async (quizId, payload) => {
+    try {
+      const res = await getAxiosInstance().put(`/quizzes/${quizId}`, payload);
+      return res.data?.data ?? res.data;
+    } catch (error) {
+      throw toServiceError(error, 'Failed to update quiz');
+    }
   },
 
-  deleteQuiz: async (quizId) => {
-    const instance = getAxiosInstance();
-    const response = await instance.delete(`/quizzes/${quizId}`);
-    return response.data;
+  remove: async (quizId) => {
+    try {
+      const res = await getAxiosInstance().delete(`/quizzes/${quizId}`);
+      return res.data;
+    } catch (error) {
+      throw toServiceError(error, 'Failed to delete quiz');
+    }
   },
 };

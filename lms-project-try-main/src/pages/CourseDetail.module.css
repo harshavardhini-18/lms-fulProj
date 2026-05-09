@@ -45,9 +45,16 @@
 .mainContainer {
   display: grid;
   /* Swap columns: ToC sidebar on the left, content on the right */
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 3fr);
+  grid-template-columns: minmax(280px, 320px) minmax(0, 3fr);
   gap: 14px;
   align-items: start;
+  transition: grid-template-columns 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* Expanded layout: when note composer is open, widen the left sidebar
+   to give the composer breathing room and let the right content shrink. */
+.mainContainerExpanded {
+  grid-template-columns: 640px minmax(0, 1fr);
 }
 
 /* Left column */
@@ -510,6 +517,16 @@
   position: sticky;
   top: 16px;
   min-height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid var(--color-border-secondary, #e2e8f0);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
 }
 
 .tocPanel::-webkit-scrollbar {
@@ -519,6 +536,60 @@
 .tocPanel::-webkit-scrollbar-thumb {
   background: var(--color-border-secondary);
   border-radius: 2px;
+}
+
+/* Sidebar tab toggle (Contents / Notes) */
+.sidebarTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #eef2f7;
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.sidebarTabBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.sidebarTabBtn:hover {
+  color: #0f172a;
+}
+
+.sidebarTabBtnActive {
+  background: linear-gradient(120deg, #4fb0c0, #2a8c9c);
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(42, 140, 156, 0.22);
+}
+
+/* Sidebar Notes panel */
+.sidebarNotesPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sidebarNotesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.emptyNotesHint {
+  margin: 8px 4px 0;
+  color: #64748b;
+  font-size: 0.85rem;
 }
 
 /* ============================================================
@@ -630,15 +701,22 @@
 
 .addNewBtn {
   border: 0;
-  background: linear-gradient(120deg, #1f7a8c, #022b3a);
+  background: linear-gradient(120deg, #4fb0c0, #2a8c9c);
   color: #ffffff;
-  padding: 10px 16px;
-  border-radius: 10px;
+  padding: 9px 16px;
+  border-radius: 8px;
   font-size: 0.86rem;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 10px 18px rgba(2, 43, 58, 0.2);
+  box-shadow: 0 4px 10px rgba(42, 140, 156, 0.22);
   letter-spacing: 0.01em;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.addNewBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(42, 140, 156, 0.28);
+  background: linear-gradient(120deg, #5cbecd, #2f97a8);
 }
 
 .notesSingleColumn {
@@ -1090,6 +1168,151 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.richContentBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.richContentBody h1,
+.richContentBody h2,
+.richContentBody h3,
+.richContentBody h4 {
+  margin: 20px 0 8px;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.richContentBody p {
+  margin: 0;
+  color: #273142;
+  line-height: 1.8;
+}
+
+.richContentBody ul,
+.richContentBody ol {
+  margin: 0 0 8px;
+  padding-left: 22px;
+  color: #273142;
+}
+
+.richContentBody li {
+  margin: 6px 0;
+}
+
+.richContentBody blockquote {
+  margin: 6px 0;
+  padding: 10px 14px;
+  border-left: 4px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 8px;
+}
+
+.richContentBody pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.richContentBody a {
+  color: #0ea5e9;
+  text-decoration: underline;
+}
+
+.richImage {
+  display: block;
+  width: min(100%, 860px);
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  margin: 4px 0 10px;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modalCard {
+  width: min(460px, 100%);
+  background: #ffffff;
+  border: 1px solid #dbe5f0;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(2, 16, 36, 0.35);
+  padding: 22px;
+}
+
+.modalTitle {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modalDescription {
+  margin: 0;
+  color: #334155;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.modalDescription strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.modalActions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modalCancelBtn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.modalCancelBtn:hover {
+  background: #eef2f7;
+  transform: translateY(-1px);
+}
+
+.modalDeleteBtn {
+  border: 0;
+  background: linear-gradient(120deg, #ef4444, #dc2626);
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.modalDeleteBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(220, 38, 38, 0.32);
 }
 
 @media (max-width: 860px) {

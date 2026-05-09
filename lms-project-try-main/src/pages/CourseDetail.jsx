@@ -4,7 +4,7 @@ import VideoPlayer from '../components/VideoPlayer'
 import TimedQuizGate from '../components/TimedQuizGate'
 import TableOfContents from '../components/TableOfContents'
 import HandwrittenCanvas from '../components/HandwrittenCanvas'
-import { resolveBackendCourseId } from '../api/courses'
+import { getBackendCourseDetail, resolveBackendCourseId } from '../api/courses'
 import { createNote, deleteNote, listNotesByCourse, updateNote } from '../api/notes'
 
 import { courses } from '../data/coursesData'
@@ -80,6 +80,85 @@ function buildModuleSections(lessons) {
   }))
 }
 
+function mapBackendModulesForToc(backendModules = []) {
+  return backendModules.map((module, moduleIndex) => ({
+    id: module.id || `module-${moduleIndex}`,
+    title: module.title || moduleTitles[moduleIndex] || `Module ${moduleIndex + 1}`,
+    lessons: Array.isArray(module.lessons)
+      ? module.lessons.map((lesson, lessonIndex) => ({
+          id: lesson.id || `${module.id || moduleIndex}-${lessonIndex}`,
+          title: lesson.title || `Lesson ${lessonIndex + 1}`,
+          startSeconds: Number(lesson.timestampStart ?? lesson.timestamp_start ?? 0),
+          duration: lesson.duration || lesson.durationLabel || '',
+          // Support all known backend video field names to avoid blank players.
+          videoUrl: String(
+            lesson.videoUrl ||
+            lesson.primaryVideoUrl ||
+            lesson.video_url ||
+            ''
+          ).trim(),
+          contentJson: lesson.contentJson || lesson.content_json || { type: 'doc', content: [] },
+        }))
+      : [],
+  }))
+}
+
+function renderTiptapNode(node, keyPrefix = 'node') {
+  if (!node || typeof node !== 'object') return null
+  const nodeType = String(node.type || '')
+  const children = Array.isArray(node.content)
+    ? node.content.map((child, i) => renderTiptapNode(child, `${keyPrefix}-${i}`))
+    : null
+
+  if (nodeType === 'text') {
+    let content = node.text || ''
+    const marks = Array.isArray(node.marks) ? node.marks : []
+    marks.forEach((mark) => {
+      const markType = String(mark?.type || '')
+      if (markType === 'bold') content = <strong key={`${keyPrefix}-b`}>{content}</strong>
+      if (markType === 'italic') content = <em key={`${keyPrefix}-i`}>{content}</em>
+      if (markType === 'underline') content = <u key={`${keyPrefix}-u`}>{content}</u>
+      if (markType === 'code') content = <code key={`${keyPrefix}-c`}>{content}</code>
+      if (markType === 'link') {
+        const href = String(mark?.attrs?.href || '').trim()
+        if (href) {
+          content = (
+            <a key={`${keyPrefix}-a`} href={href} target="_blank" rel="noreferrer">
+              {content}
+            </a>
+          )
+        }
+      }
+    })
+    return <span key={keyPrefix}>{content}</span>
+  }
+
+  if (nodeType === 'paragraph') return <p key={keyPrefix}>{children}</p>
+  if (nodeType === 'heading') {
+    const level = Number(node?.attrs?.level || 2)
+    if (level === 1) return <h1 key={keyPrefix}>{children}</h1>
+    if (level === 3) return <h3 key={keyPrefix}>{children}</h3>
+    if (level === 4) return <h4 key={keyPrefix}>{children}</h4>
+    return <h2 key={keyPrefix}>{children}</h2>
+  }
+  if (nodeType === 'bulletList') return <ul key={keyPrefix}>{children}</ul>
+  if (nodeType === 'orderedList') return <ol key={keyPrefix}>{children}</ol>
+  if (nodeType === 'listItem') return <li key={keyPrefix}>{children}</li>
+  if (nodeType === 'blockquote') return <blockquote key={keyPrefix}>{children}</blockquote>
+  if (nodeType === 'codeBlock') return <pre key={keyPrefix}>{children}</pre>
+  if (nodeType === 'hardBreak') return <br key={keyPrefix} />
+  if (nodeType === 'horizontalRule') return <hr key={keyPrefix} />
+  if (nodeType === 'image') {
+    const src = String(node?.attrs?.src || '').trim()
+    if (!src) return null
+    const alt = String(node?.attrs?.alt || 'Lesson image')
+    return <img key={keyPrefix} className={styles.richImage} src={src} alt={alt} loading="lazy" />
+  }
+
+  if (children) return <span key={keyPrefix}>{children}</span>
+  return null
+}
+
 function CourseDetail() {
   const { id } = useParams()
   const videoRef = useRef(null)
@@ -91,16 +170,45 @@ function CourseDetail() {
     () => courses.find((c) => c.id === Number(id)),
     [id]
   )
+  const [backendCourseDetail, setBackendCourseDetail] = useState(null)
+  const [backendCourseError, setBackendCourseError] = useState('')
+  const [backendDetailLoading, setBackendDetailLoading] = useState(true)
 
-  const lessons = useMemo(() => course?.lessons || [], [course])
-  const modules = buildModuleSections(lessons)
-  const timedQuiz = course?.timedQuiz || defaultTimedQuiz
-  const fallbackCourseId = useMemo(() => `frontend-course-${course?.id || id}`, [course?.id, id])
-
+  const backendModules = useMemo(
+    () => mapBackendModulesForToc(backendCourseDetail?.modules || []),
+    [backendCourseDetail]
+  )
+  const flattenedBackendLessons = useMemo(
+    () => backendModules.flatMap((module) => module.lessons || []),
+    [backendModules]
+  )
+  const lessons = useMemo(
+    () => (flattenedBackendLessons.length > 0 ? flattenedBackendLessons : course?.lessons || []),
+    [flattenedBackendLessons, course]
+  )
+  const modules = useMemo(
+    () => (backendModules.length > 0 ? backendModules : buildModuleSections(lessons)),
+    [backendModules, lessons]
+  )
   const [activeLessonIndex, setActiveLessonIndex] = useState(0)
   const [isQuizVisible, setIsQuizVisible] = useState(false)
   const [isQuizCompleted, setIsQuizCompleted] = useState(false)
+  const timedQuiz = course?.timedQuiz || defaultTimedQuiz
+  const currentLesson = lessons[activeLessonIndex] || null
+  const videoSrc = currentLesson?.videoUrl || course?.videoUrl || ''
+  const lessonContentJson = currentLesson?.contentJson || null
+  const hasBackendRichContent = Boolean(
+    lessonContentJson &&
+      lessonContentJson.type === 'doc' &&
+      Array.isArray(lessonContentJson.content) &&
+      lessonContentJson.content.length > 0
+  )
+  const fallbackCourseId = useMemo(() => `frontend-course-${course?.id || id}`, [course?.id, id])
+  const courseTitle = course?.title || backendCourseDetail?.title || 'Course'
+  const courseImage =
+    course?.image || backendCourseDetail?.thumbnailUrl || backendCourseDetail?.bannerUrl || ''
 
+  const [sidebarTab, setSidebarTab] = useState('toc') // 'toc' | 'notes'
   const [notes, setNotes] = useState([])
   const [selectedNoteId, setSelectedNoteId] = useState(null)
   const [isComposerOpen, setIsComposerOpen] = useState(false)
@@ -112,12 +220,48 @@ function CourseDetail() {
   const [composerInitialScene, setComposerInitialScene] = useState(EMPTY_SCENE)
   const [notesError, setNotesError] = useState('')
   const [backendCourseId, setBackendCourseId] = useState(null)
+  const [deleteTargetNote, setDeleteTargetNote] = useState(null)
   // composer save button transient state
   const [saveBtnSaved, setSaveBtnSaved] = useState(false)
   const saveBtnTimeoutRef = useRef(null)
   // ID of the note that was most recently saved (used to trigger inline indicator immediately)
   const [recentlySavedNoteId, setRecentlySavedNoteId] = useState(null)
   const recentlySavedTimerRef = useRef(null)
+
+  // LOAD COURSE DETAIL (backend when available)
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCourseDetail() {
+      try {
+        setBackendDetailLoading(true)
+        const resolvedCourseId = course ? await resolveBackendCourseId(course) : String(id || '')
+        if (!resolvedCourseId) {
+          if (!cancelled) {
+            setBackendCourseDetail(null)
+            setBackendCourseError('')
+            setBackendDetailLoading(false)
+          }
+          return
+        }
+        const detail = await getBackendCourseDetail(resolvedCourseId)
+        if (cancelled) return
+        setBackendCourseDetail(detail)
+        setBackendCourseError('')
+      } catch (error) {
+        if (cancelled) return
+        setBackendCourseDetail(null)
+        setBackendCourseError(error?.message || 'Unable to load backend course detail.')
+      } finally {
+        if (!cancelled) setBackendDetailLoading(false)
+      }
+    }
+
+    loadCourseDetail()
+    return () => {
+      cancelled = true
+    }
+  }, [course, id])
 
   // LOAD NOTES (backend only)
   useEffect(() => {
@@ -128,7 +272,7 @@ function CourseDetail() {
       setBackendCourseId(fallbackCourseId)
 
       try {
-        const resolvedCourseId = await resolveBackendCourseId(course)
+        const resolvedCourseId = course ? await resolveBackendCourseId(course) : String(id || '')
         const effectiveCourseId =
           resolvedCourseId ||
           import.meta.env.VITE_BACKEND_COURSE_ID ||
@@ -221,7 +365,19 @@ function CourseDetail() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!deleteTargetNote) return undefined
+
+    const handleEsc = (event) => {
+      if (event.key === 'Escape') setDeleteTargetNote(null)
+    }
+
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [deleteTargetNote])
+
   const handleStartNewNote = () => {
+    setSidebarTab('notes')
     setIsComposerOpen(true)
     setNoteTitle('')
     setNoteText('')
@@ -241,6 +397,7 @@ function CourseDetail() {
   }
 
   const handleEditNote = (note) => {
+    setSidebarTab('notes')
     setIsComposerOpen(true)
     setNoteTitle(note.title || '')
     setNoteText(note.textContent || '')
@@ -297,6 +454,16 @@ function CourseDetail() {
     }
 
     run()
+  }
+
+  const handleRequestDeleteNote = (note) => {
+    setDeleteTargetNote(note)
+  }
+
+  const handleConfirmDeleteNote = () => {
+    if (!deleteTargetNote?.id) return
+    handleDeleteNote(deleteTargetNote.id)
+    setDeleteTargetNote(null)
   }
 
   const handleSaveNote = () => {
@@ -511,9 +678,7 @@ function CourseDetail() {
               <button
                 type="button"
                 className={`${styles.iconActionBtn} ${styles.iconDeleteBtn}`}
-                onClick={() => {
-                  if (window.confirm('Delete this note?')) handleDeleteNote(note.id)
-                }}
+                onClick={() => handleRequestDeleteNote(note)}
                 aria-label="Delete note"
                 title="Delete note"
               >
@@ -526,213 +691,287 @@ function CourseDetail() {
     )
   }
 
-  if (!course) return <Navigate to="/courses" replace />
+  if (!course && backendDetailLoading) return null
+  if (!course && !backendCourseDetail) return <Navigate to="/courses" replace />
 
   return (
     <section className={styles.page}>
-      <div className={styles.mainContainer}>
-        {/* LEFT (ToC) */}
-        <div className={styles.tocPanel}>
-          <TableOfContents
-            lessons={lessons}
-            modules={modules}
-            activeLessonIndex={activeLessonIndex}
-            onLessonSelect={(i, t) => {
-              videoRef.current.currentTime = t
-              videoRef.current.play()
-            }}
-          />
-        </div>
+      <div className={`${styles.mainContainer} ${isComposerOpen ? styles.mainContainerExpanded : ''}`}>
+        {/* LEFT (sidebar — TOC / Notes toggle) */}
+        <aside className={styles.tocPanel}>
+          <div className={styles.sidebarTabs} role="tablist" aria-label="Sidebar view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sidebarTab === 'toc'}
+              className={`${styles.sidebarTabBtn} ${sidebarTab === 'toc' ? styles.sidebarTabBtnActive : ''}`}
+              onClick={() => setSidebarTab('toc')}
+            >
+              Contents
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sidebarTab === 'notes'}
+              className={`${styles.sidebarTabBtn} ${sidebarTab === 'notes' ? styles.sidebarTabBtnActive : ''}`}
+              onClick={() => setSidebarTab('notes')}
+            >
+              Notes
+            </button>
+          </div>
+
+          {sidebarTab === 'toc' && (
+            <TableOfContents
+              lessons={lessons}
+              modules={modules}
+              activeLessonIndex={activeLessonIndex}
+              onLessonSelect={(i, t) => {
+                videoRef.current.currentTime = t
+                videoRef.current.play()?.catch(() => {})
+              }}
+            />
+          )}
+
+          {sidebarTab === 'notes' && (
+            <div className={styles.sidebarNotesPanel}>
+              <div className={styles.sidebarNotesHeader}>
+                <p className={styles.railTitle}>All Notes</p>
+                <button
+                  type="button"
+                  className={styles.addNewBtn}
+                  onClick={handleStartNewNote}
+                >
+                  Add Note
+                </button>
+              </div>
+
+              {isComposerOpen && (
+                <div ref={composerRef} className={styles.noteFormCard}>
+                  <label htmlFor="note-title" className={styles.label}>Title</label>
+                  <input
+                    id="note-title"
+                    className={styles.titleInput}
+                    value={noteTitle}
+                    onChange={(event) => setNoteTitle(event.target.value)}
+                    placeholder="Example: Blockchain consensus diagram"
+                  />
+
+                  <div className={styles.drawLabelRow}>
+                    <p className={styles.label}>Editor Mode</p>
+                    <p className={styles.drawHint}>Pick Text or Draw before writing your note.</p>
+                  </div>
+
+                  <div className={styles.modeToggleRow}>
+                    <button
+                      type="button"
+                      className={`${styles.modeToggleBtn} ${editorMode === 'text' ? styles.modeToggleBtnActive : ''}`}
+                      onClick={() => setEditorMode('text')}
+                    >
+                      Text
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.modeToggleBtn} ${editorMode === 'draw' ? styles.modeToggleBtnActive : ''}`}
+                      onClick={() => {
+                        setEditorMode('draw')
+                        canvasRef.current?.setTool?.('freedraw')
+                      }}
+                    >
+                      Draw
+                    </button>
+                  </div>
+
+                  <div className={editorMode === 'text' ? '' : styles.hiddenEditor}>
+                    <textarea
+                      className={styles.textEditor}
+                      value={noteText}
+                      onChange={(event) => setNoteText(event.target.value)}
+                      placeholder="Start typing your note..."
+                    />
+                  </div>
+
+                  <div className={`${styles.canvasArea} ${editorMode === 'draw' ? '' : styles.hiddenEditor}`}>
+                    <HandwrittenCanvas
+                      key={`composer-canvas-${editingNoteId || 'new'}`}
+                      ref={canvasRef}
+                      initialScene={composerInitialScene}
+                      activeTool="freedraw"
+                      height={520}
+                    />
+                  </div>
+
+                  {formError && <p className={styles.formError}>{formError}</p>}
+
+                  <div className={styles.noteActions}>
+                    <button
+                      type="button"
+                      className={styles.secondaryBtn}
+                      onClick={() => {
+                        setIsComposerOpen(false)
+                        setNoteText('')
+                        setFormError('')
+                        if (canvasRef.current) {
+                          canvasRef.current.clearCanvas()
+                        }
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button type="button" className={styles.addNoteBtn} onClick={handleSaveNote}>
+                      {saveBtnSaved ? 'Saved ✓' : 'Save Note'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {notesError ? <p className={styles.formError}>{notesError}</p> : null}
+
+              {notes.length === 0 && !isComposerOpen ? (
+                <p className={styles.emptyNotesHint}>No notes yet.</p>
+              ) : (
+                notes.length > 0 && (
+                  <div className={styles.noteList}>
+                    {notes.map((note) => (
+                      <NoteItem key={note.id} note={note} recentlySavedNoteId={recentlySavedNoteId} />
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </aside>
 
         {/* RIGHT (content) */}
         <div className={styles.leftColumn}>
 
           <div className={styles.titleBlock}>
-            <div className={styles.titleRow}>
-              <h1 className={styles.courseTitleCentered}>{course.title}</h1>
-              <button
-                type="button"
-                className={styles.addNoteFloating}
-                onClick={handleStartNewNote}
-              >
-                Add Note
-              </button>
-            </div>
+            <h1 className={styles.courseTitleCentered}>{courseTitle}</h1>
           </div>
 
-          <VideoPlayer ref={videoRef} src={course.videoUrl}>
+          <VideoPlayer ref={videoRef} title={courseTitle} src={videoSrc}>
             {isQuizVisible && (
               <TimedQuizGate
                 quiz={timedQuiz}
                 onSuccess={() => {
                   setIsQuizCompleted(true)
                   setIsQuizVisible(false)
-                  videoRef.current.play()
+                  videoRef.current.play()?.catch(() => {})
                 }}
               />
             )}
           </VideoPlayer>
 
           <article className={styles.articleBody}>
-            <h2 className={styles.articleHeading}>Why {course.title} matters</h2>
-            <p>
-              {course.title} is one of the most in-demand skills today. Teams use it
-              every day to ship faster, make better decisions, and build reliable
-              products. Learning it gives you a clear edge in real projects, interviews,
-              and on-the-job problem solving.
-            </p>
-
-            {lessons.length > 0 && (
+            {backendCourseError ? <p className={styles.formError}>{backendCourseError}</p> : null}
+            {hasBackendRichContent ? (
+              <div className={styles.richContentBody}>
+                {lessonContentJson.content.map((node, index) =>
+                  renderTiptapNode(node, `lesson-content-${index}`)
+                )}
+              </div>
+            ) : (
               <>
-                <h2 className={styles.articleHeading}>Key concepts in this course</h2>
+                <h2 className={styles.articleHeading}>Why {courseTitle} matters</h2>
+                <p>
+                  {courseTitle} is one of the most in-demand skills today. Teams use it
+                  every day to ship faster, make better decisions, and build reliable
+                  products. Learning it gives you a clear edge in real projects, interviews,
+                  and on-the-job problem solving.
+                </p>
+
+                {lessons.length > 0 && (
+                  <>
+                    <h2 className={styles.articleHeading}>Key concepts in this course</h2>
+                    <ul className={styles.bulletList}>
+                      {lessons.map((lesson, lessonIndex) => (
+                        <li key={`learn-${lesson.id || lessonIndex}`}>
+                          <strong>{lesson.title}</strong>
+                          {' — a focused walkthrough that builds practical, hands-on intuition.'}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                <h2 className={styles.articleHeading}>What you’ll be able to do</h2>
                 <ul className={styles.bulletList}>
-                  {lessons.map((lesson) => (
-                    <li key={`learn-${lesson.title}-${lesson.startSeconds}`}>
-                      <strong>{lesson.title}</strong>
-                      {' — a focused walkthrough that builds practical, hands-on intuition.'}
-                    </li>
-                  ))}
+                  <li>Apply core {courseTitle} concepts to real-world scenarios with confidence.</li>
+                  <li>Break down complex problems into clear, structured steps.</li>
+                  <li>Communicate your work and results clearly to teammates and stakeholders.</li>
+                  <li>Build a portfolio-ready outcome you can showcase on your resume.</li>
                 </ul>
+
+                {courseImage && (
+                  <figure className={styles.articleFigure}>
+                    <img src={courseImage} alt={courseTitle} loading="lazy" />
+                    <figcaption>{courseTitle} — quick visual reference.</figcaption>
+                  </figure>
+                )}
+
+                <h2 className={styles.articleHeading}>How this course is structured</h2>
+                <p>
+                  The course is organised into short, focused lessons that build on each
+                  other. Each lesson introduces one clear idea, walks through a small
+                  hands-on example, and ends with a short recap so concepts stay sticky.
+                  You can follow the lessons in order, or use the Table of Contents on
+                  the left to jump to any topic that interests you.
+                </p>
+                <p>
+                  As you progress, take notes on patterns you find tricky and revisit
+                  earlier lessons whenever a concept feels shaky — repetition is what
+                  turns these ideas from theory into instinct. By the end you should be
+                  able to explain the core ideas in your own words and apply them to a
+                  small project of your own.
+                </p>
               </>
             )}
 
-            <h2 className={styles.articleHeading}>What you’ll be able to do</h2>
-            <ul className={styles.bulletList}>
-              <li>Apply core {course.title} concepts to real-world scenarios with confidence.</li>
-              <li>Break down complex problems into clear, structured steps.</li>
-              <li>Communicate your work and results clearly to teammates and stakeholders.</li>
-              <li>Build a portfolio-ready outcome you can showcase on your resume.</li>
-            </ul>
-
-            {course.image && (
-              <figure className={styles.articleFigure}>
-                <img src={course.image} alt={course.title} loading="lazy" />
-                <figcaption>{course.title} — quick visual reference.</figcaption>
-              </figure>
-            )}
-
-            <h2 className={styles.articleHeading}>How this course is structured</h2>
-            <p>
-              The course is organised into short, focused lessons that build on each
-              other. Each lesson introduces one clear idea, walks through a small
-              hands-on example, and ends with a short recap so concepts stay sticky.
-              You can follow the lessons in order, or use the Table of Contents on
-              the left to jump to any topic that interests you.
-            </p>
-            <p>
-              As you progress, take notes on patterns you find tricky and revisit
-              earlier lessons whenever a concept feels shaky — repetition is what
-              turns these ideas from theory into instinct. By the end you should be
-              able to explain the core ideas in your own words and apply them to a
-              small project of your own.
-            </p>
-
           </article>
-
-
-          {(isComposerOpen || notes.length > 0) && (
-            <div className={styles.notesWrapper}>
-              <div className={styles.notesSingleColumn}>
-                {isComposerOpen && (
-                    <div ref={composerRef} className={styles.noteFormCard}>
-                      <label htmlFor="note-title" className={styles.label}>Title</label>
-                      <input
-                        id="note-title"
-                        className={styles.titleInput}
-                        value={noteTitle}
-                        onChange={(event) => setNoteTitle(event.target.value)}
-                        placeholder="Example: Blockchain consensus diagram"
-                      />
-
-                      <div className={styles.drawLabelRow}>
-                        <p className={styles.label}>Editor Mode</p>
-                        <p className={styles.drawHint}>Pick Text or Draw before writing your note.</p>
-                      </div>
-
-                      <div className={styles.modeToggleRow}>
-                        <button
-                          type="button"
-                          className={`${styles.modeToggleBtn} ${editorMode === 'text' ? styles.modeToggleBtnActive : ''}`}
-                          onClick={() => {
-                            setEditorMode('text')
-                          }}
-                        >
-                          Text
-                        </button>
-                        <button
-                          type="button"
-                          className={`${styles.modeToggleBtn} ${editorMode === 'draw' ? styles.modeToggleBtnActive : ''}`}
-                          onClick={() => {
-                            setEditorMode('draw')
-                            canvasRef.current?.setTool?.('freedraw')
-                          }}
-                        >
-                          Draw
-                        </button>
-                      </div>
-
-                      <div className={editorMode === 'text' ? '' : styles.hiddenEditor}>
-                        <textarea
-                          className={styles.textEditor}
-                          value={noteText}
-                          onChange={(event) => setNoteText(event.target.value)}
-                          placeholder="Start typing your note..."
-                        />
-                      </div>
-
-                      <div className={`${styles.canvasArea} ${editorMode === 'draw' ? '' : styles.hiddenEditor}`}>
-                        <HandwrittenCanvas
-                          key={`composer-canvas-${editingNoteId || 'new'}`}
-                          ref={canvasRef}
-                          initialScene={composerInitialScene}
-                          activeTool="freedraw"
-                          height={520}
-                        />
-                      </div>
-
-                      {formError && <p className={styles.formError}>{formError}</p>}
-
-                      <div className={styles.noteActions}>
-                        <button
-                          type="button"
-                          className={styles.secondaryBtn}
-                          onClick={() => {
-                            setIsComposerOpen(false)
-                            setNoteText('')
-                            setFormError('')
-                            if (canvasRef.current) {
-                              canvasRef.current.clearCanvas()
-                            }
-                          }}
-                        >
-                          Cancel
-                        </button>
-                        <button type="button" className={styles.addNoteBtn} onClick={handleSaveNote}>
-                          {saveBtnSaved ? 'Saved ✓' : 'Save Note'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                {notes.length > 0 && (
-                  <section className={styles.notesRail}>
-                    <p className={styles.railTitle}>All Notes</p>
-                    {notesError ? <p className={styles.formError}>{notesError}</p> : null}
-
-                    <div className={styles.noteList}>
-                      {notes.map((note) => (
-                        <NoteItem key={note.id} note={note} recentlySavedNoteId={recentlySavedNoteId} />
-                      ))}
-                    </div>
-                  </section>
-                )}
-              </div>
-            </div>
-          )}
 
         </div>
 
       </div>
+      {deleteTargetNote && (
+        <div
+          className={styles.modalBackdrop}
+          role="presentation"
+          onClick={() => setDeleteTargetNote(null)}
+        >
+          <div
+            className={styles.modalCard}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-note-modal-title"
+            aria-describedby="delete-note-modal-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="delete-note-modal-title" className={styles.modalTitle}>
+              Delete note?
+            </h3>
+            <p id="delete-note-modal-description" className={styles.modalDescription}>
+              This will permanently remove
+              <strong>{` "${deleteTargetNote.title || 'Untitled note'}"`}</strong>
+              . This action cannot be undone.
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.modalCancelBtn}
+                onClick={() => setDeleteTargetNote(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.modalDeleteBtn}
+                onClick={handleConfirmDeleteNote}
+              >
+                Delete Note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

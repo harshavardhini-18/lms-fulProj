@@ -1,14 +1,15 @@
 import React, { useEffect } from 'react';
 import './Toast.css';
 
-export default function Toast({ message, type = 'info', onClose }) {
+export default function Toast({ message, type = 'info', onClose, position = 'bottom-right' }) {
   useEffect(() => {
+    if (typeof onClose !== 'function') return undefined;
     const timeout = setTimeout(onClose, 3000);
     return () => clearTimeout(timeout);
   }, [onClose]);
 
   return (
-    <div className={`toast toast-${type}`}>
+    <div className={`toast toast-${type} toast-${position}`}>
       <div className="toast-content">
         {type === 'success' && <span className="toast-icon">✅</span>}
         {type === 'error' && <span className="toast-icon">❌</span>}

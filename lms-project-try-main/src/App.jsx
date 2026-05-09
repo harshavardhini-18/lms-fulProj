@@ -11,6 +11,8 @@ import AdminDashboard from './pages/AdminDashboard'
 import AdminCoursesManagement from './admin/pages/AdminCoursesManagement'
 import AdminAddCourse from './admin/pages/AdminAddCourse'
 import AdminCourseEditorNew from './admin/pages/AdminCourseEditorNew'
+import AdminCoursePreview from './admin/pages/AdminCoursePreview'
+import AdminQuizManagement from './admin/pages/AdminQuizManagement'
 import Reports from './pages/Reports'
 import StaffDashboard from './pages/StaffDashboard'
 import StudentHome from './pages/StudentHome'
@@ -278,6 +280,14 @@ function App() {
             }
           />
           <Route
+            path="/admin/courses/:courseId/preview"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminCoursePreview />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
             path="/admin/courses/:courseId"
             element={
               <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
@@ -286,12 +296,16 @@ function App() {
             }
           />
           <Route
-            path="/admin/reports"
+            path="/admin/quizzes"
             element={
               <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
-                <Reports />
+                <AdminQuizManagement />
               </RoleOnlyRoute>
             }
+          />
+          <Route
+            path="/admin/reports"
+            element={<Navigate to="/admin/quizzes" replace />}
           />
           <Route
             path="/admin/profile"
@@ -320,6 +334,14 @@ function App() {
             }
           />
           <Route
+            path="/staff/courses/:courseId/preview"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <AdminCoursePreview />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
             path="/staff/courses/:courseId"
             element={
               <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
@@ -328,12 +350,16 @@ function App() {
             }
           />
           <Route
-            path="/staff/reports"
+            path="/staff/quizzes"
             element={
               <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
-                <Reports />
+                <AdminQuizManagement />
               </RoleOnlyRoute>
             }
+          />
+          <Route
+            path="/staff/reports"
+            element={<Navigate to="/staff/quizzes" replace />}
           />
           <Route
             path="/staff/profile"

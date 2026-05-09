@@ -11,29 +11,35 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import Toast from '../components/common/Toast';
 import './AdminCourseEditorNew.css';
 
+const STATUS_META = {
+  published: { label: 'Published', color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+  draft: { label: 'Draft', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+  archived: { label: 'Archived', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
+};
+
 export default function AdminCourseEditor() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const isNewCourse = courseId === 'new';
 
-  // Main state
   const [course, setCourse] = useState(null);
   const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(!isNewCourse);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // UI state
-  const [viewMode, setViewMode] = useState('course'); // 'course', 'module', 'lesson'
+  // What's selected
+  const [viewMode, setViewMode] = useState('course'); // 'course' | 'module' | 'lesson'
   const [selectedModuleId, setSelectedModuleId] = useState(null);
   const [selectedModule, setSelectedModule] = useState(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
-  const [editingLesson, setEditingLesson] = useState(null);
+  const [selectedLessonModuleId, setSelectedLessonModuleId] = useState(null);
+
+  // Highlight newly created items
   const [newlyCreatedModuleId, setNewlyCreatedModuleId] = useState(null);
   const [newlyCreatedLessonId, setNewlyCreatedLessonId] = useState(null);
-  const [showCourseDetails, setShowCourseDetails] = useState(false);
 
-  // Form modal state
+  // Inline modals for creating module / lesson
   const [showModuleModal, setShowModuleModal] = useState(false);
   const [moduleTitleInput, setModuleTitleInput] = useState('');
   const [showLessonModal, setShowLessonModal] = useState(false);
@@ -41,10 +47,17 @@ export default function AdminCourseEditor() {
   const [lessonTargetModule, setLessonTargetModule] = useState(null);
 
   useEffect(() => {
-    if (!isNewCourse) {
-      fetchCourseData();
-    }
+    if (!isNewCourse) fetchCourseData();
   }, [courseId, isNewCourse]);
+
+  useEffect(() => {
+    if (!newlyCreatedModuleId && !newlyCreatedLessonId) return;
+    const t = setTimeout(() => {
+      setNewlyCreatedModuleId(null);
+      setNewlyCreatedLessonId(null);
+    }, 3500);
+    return () => clearTimeout(t);
+  }, [newlyCreatedModuleId, newlyCreatedLessonId]);
 
   const fetchCourseData = async () => {
     try {
@@ -52,54 +65,47 @@ export default function AdminCourseEditor() {
       const response = await adminCourseService.getCourse(courseId);
       setCourse(response.data);
       setModules(response.data.modules || []);
-    } catch (error) {
+    } catch {
       showToast('Failed to load course', 'error');
-      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Course handlers
+  /* ─── Course ─────────────────────────────────── */
   const handleSaveCourse = async (formData) => {
-    if (!formData.title.trim()) {
+    if (!formData.title?.trim()) {
       showToast('Course title is required', 'error');
       return;
     }
-
     try {
       setSaving(true);
       if (isNewCourse) {
         const response = await adminCourseService.createCourse(formData);
         setCourse(response.data);
-        showToast('Course created successfully!', 'success');
+        showToast('Course created!', 'success');
         navigate(`/admin/courses/${response.data._id}`);
       } else {
         await adminCourseService.updateCourse(courseId, formData);
-        setCourse(prev => ({ ...prev, ...formData }));
-        showToast('Course updated successfully!', 'success');
+        setCourse((prev) => ({ ...prev, ...formData }));
+        showToast('Course saved!', 'success');
       }
-    } catch (error) {
+    } catch {
       showToast('Error saving course', 'error');
-      console.error(error);
     } finally {
       setSaving(false);
     }
   };
 
-  // Module handlers
-  const handleAddModule = async () => {
+  /* ─── Modules ─────────────────────────────────── */
+  const handleAddModule = () => {
     setModuleTitleInput('');
     setShowModuleModal(true);
   };
 
   const handleCreateModule = async () => {
     const title = moduleTitleInput.trim();
-    if (!title) {
-      showToast('Module title is required', 'error');
-      return;
-    }
-
+    if (!title) { showToast('Module title is required', 'error'); return; }
     try {
       setSaving(true);
       const response = await adminModuleService.createModule(courseId, {
@@ -107,53 +113,40 @@ export default function AdminCourseEditor() {
         description: '',
         order: modules.length,
       });
-      const updatedModules = [...modules, response.data];
-      setModules(updatedModules);
+      const updated = [...modules, response.data];
+      setModules(updated);
+      setNewlyCreatedModuleId(response.data._id);
       setSelectedModuleId(response.data._id);
       setSelectedModule(response.data);
-      setNewlyCreatedModuleId(response.data._id);
+      setViewMode('module');
       setShowModuleModal(false);
       showToast('Module created!', 'success');
-    } catch (error) {
+    } catch {
       showToast('Error creating module', 'error');
-      console.error(error);
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleSelectModule = (module) => {
-    setSelectedModuleId(module._id);
-    setSelectedModule(module);
-    setSelectedLesson(null);
-    setEditingLesson(null);
-    setViewMode('module');
   };
 
   const handleEditModule = (module) => {
     setSelectedModuleId(module._id);
     setSelectedModule(module);
     setSelectedLesson(null);
-    setEditingLesson(null);
     setViewMode('module');
   };
 
   const handleSaveModule = async (formData) => {
     if (!selectedModuleId) return;
-
     try {
       setSaving(true);
       await adminModuleService.updateModule(courseId, selectedModuleId, formData);
-      setModules(prev =>
-        prev.map(m =>
-          m._id === selectedModuleId ? { ...m, ...formData } : m
-        )
+      setModules((prev) =>
+        prev.map((m) => (m._id === selectedModuleId ? { ...m, ...formData } : m))
       );
-      setSelectedModule(prev => ({ ...prev, ...formData }));
-      showToast('Module updated!', 'success');
-    } catch (error) {
+      setSelectedModule((prev) => ({ ...prev, ...formData }));
+      showToast('Module saved!', 'success');
+    } catch {
       showToast('Error saving module', 'error');
-      console.error(error);
     } finally {
       setSaving(false);
     }
@@ -163,23 +156,22 @@ export default function AdminCourseEditor() {
     try {
       setSaving(true);
       await adminModuleService.deleteModule(courseId, moduleId);
-      setModules(prev => prev.filter(m => m._id !== moduleId));
+      setModules((prev) => prev.filter((m) => m._id !== moduleId));
       if (selectedModuleId === moduleId) {
         setSelectedModuleId(null);
         setSelectedModule(null);
         setViewMode('course');
       }
       showToast('Module deleted', 'success');
-    } catch (error) {
+    } catch {
       showToast('Error deleting module', 'error');
-      console.error(error);
     } finally {
       setSaving(false);
     }
   };
 
-  // Lesson handlers
-  const handleAddLesson = async (module) => {
+  /* ─── Lessons ─────────────────────────────────── */
+  const handleAddLesson = (module) => {
     setLessonTargetModule(module);
     setLessonTitleInput('');
     setShowLessonModal(true);
@@ -187,63 +179,40 @@ export default function AdminCourseEditor() {
 
   const handleCreateLesson = async () => {
     const title = lessonTitleInput.trim();
-    if (!title) {
-      showToast('Lesson title is required', 'error');
-      return;
-    }
-    if (!lessonTargetModule?._id) {
-      showToast('Select a valid module first', 'error');
-      return;
-    }
-
+    if (!title) { showToast('Topic title is required', 'error'); return; }
+    if (!lessonTargetModule?._id) { showToast('No module selected', 'error'); return; }
     try {
       setSaving(true);
       const response = await adminLessonService.createLesson(courseId, lessonTargetModule._id, {
         title,
         summary: '',
         status: 'draft',
-        description: '',
         contentType: 'video',
         videoUrl: '',
         videoDuration: 0,
         videoType: 'mp4',
         thumbnailUrl: '',
-        version: 1,
-        contentJson: {
-          type: 'doc',
-          content: [
-            {
-              type: 'paragraph',
-              content: [{ type: 'text', text: '' }],
-            },
-          ],
-        },
+        contentJson: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }] },
         notesEnabled: true,
-        order: (lessonTargetModule.lessons?.length || 0),
+        order: lessonTargetModule.lessons?.length || 0,
       });
-      
-      // Update modules with new lesson
-      setModules(prev =>
-        prev.map(m =>
+      setModules((prev) =>
+        prev.map((m) =>
           m._id === lessonTargetModule._id
-            ? {
-                ...m,
-                lessons: [...(m.lessons || []), response.data],
-              }
+            ? { ...m, lessons: [...(m.lessons || []), response.data] }
             : m
         )
       );
-      
       setSelectedLesson(response.data);
-      setEditingLesson(response.data);
+      setSelectedLessonModuleId(lessonTargetModule._id);
+      setSelectedModuleId(lessonTargetModule._id);
       setViewMode('lesson');
       setNewlyCreatedModuleId(lessonTargetModule._id);
       setNewlyCreatedLessonId(response.data._id);
       setShowLessonModal(false);
-      showToast('Lesson created!', 'success');
-    } catch (error) {
-      showToast('Error creating lesson', 'error');
-      console.error(error);
+      showToast('Topic created!', 'success');
+    } catch {
+      showToast('Error creating topic', 'error');
     } finally {
       setSaving(false);
     }
@@ -251,42 +220,28 @@ export default function AdminCourseEditor() {
 
   const handleSelectLesson = (moduleId, lesson) => {
     setSelectedLesson(lesson);
-    setEditingLesson(lesson);
+    setSelectedLessonModuleId(moduleId);
+    setSelectedModuleId(moduleId);
     setViewMode('lesson');
   };
 
   const handleSaveLesson = async (formData) => {
-    if (!selectedModuleId || !selectedLesson) return;
-
+    if (!selectedLessonModuleId || !selectedLesson) return;
     try {
       setSaving(true);
-      await adminLessonService.updateLesson(
-        courseId,
-        selectedModuleId,
-        selectedLesson._id,
-        formData
-      );
-      
-      // Update modules with updated lesson
-      setModules(prev =>
-        prev.map(m =>
-          m._id === selectedModuleId
-            ? {
-                ...m,
-                lessons: m.lessons.map(l =>
-                  l._id === selectedLesson._id ? { ...l, ...formData } : l
-                ),
-              }
+      await adminLessonService.updateLesson(courseId, selectedLessonModuleId, selectedLesson._id, formData);
+      setModules((prev) =>
+        prev.map((m) =>
+          m._id === selectedLessonModuleId
+            ? { ...m, lessons: m.lessons.map((l) => (l._id === selectedLesson._id ? { ...l, ...formData } : l)) }
             : m
         )
       );
-      
-      setSelectedLesson(prev => ({ ...prev, ...formData }));
-      setEditingLesson(prev => ({ ...prev, ...formData }));
-      showToast('Lesson updated!', 'success');
+      setSelectedLesson((prev) => ({ ...prev, ...formData }));
+      showToast('Topic saved!', 'success');
     } catch (error) {
-      showToast('Error saving lesson', 'error');
-      console.error(error);
+      const apiMessage = error?.response?.data?.message;
+      showToast(apiMessage || 'Error saving topic', 'error');
     } finally {
       setSaving(false);
     }
@@ -296,27 +251,67 @@ export default function AdminCourseEditor() {
     try {
       setSaving(true);
       await adminLessonService.deleteLesson(courseId, moduleId, lessonId);
-      
-      setModules(prev =>
-        prev.map(m =>
+      setModules((prev) =>
+        prev.map((m) =>
           m._id === moduleId
-            ? {
-                ...m,
-                lessons: m.lessons.filter(l => l._id !== lessonId),
-              }
+            ? { ...m, lessons: m.lessons.filter((l) => l._id !== lessonId) }
             : m
         )
       );
-      
       if (selectedLesson?._id === lessonId) {
         setSelectedLesson(null);
-        setEditingLesson(null);
-        setViewMode('module');
+        setViewMode('course');
       }
-      showToast('Lesson deleted', 'success');
+      showToast('Topic deleted', 'success');
+    } catch {
+      showToast('Error deleting topic', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── drag-and-drop reorder → persist `position` in PostgreSQL (`order` in API body) ──
+  const snapshotModules = (list) =>
+    list.map((m) => ({
+      ...m,
+      lessons: Array.isArray(m.lessons) ? [...m.lessons] : [],
+    }));
+
+  const handleReorderModules = async (reordered) => {
+    const previous = snapshotModules(modules);
+    setModules(reordered);
+    try {
+      setSaving(true);
+      await Promise.all(
+        reordered.map((m, idx) => adminModuleService.updateModule(courseId, m._id, { order: idx }))
+      );
+      showToast('Module order saved', 'success');
     } catch (error) {
-      showToast('Error deleting lesson', 'error');
-      console.error(error);
+      setModules(previous);
+      const apiMessage = error?.response?.data?.message;
+      showToast(apiMessage || 'Could not save module order', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReorderLessons = async (moduleId, reorderedLessons) => {
+    const previous = snapshotModules(modules);
+    setModules((prev) =>
+      prev.map((m) => (m._id === moduleId ? { ...m, lessons: reorderedLessons } : m))
+    );
+    try {
+      setSaving(true);
+      await Promise.all(
+        reorderedLessons.map((lesson, idx) =>
+          adminLessonService.updateLesson(courseId, moduleId, lesson._id, { order: idx })
+        )
+      );
+      showToast('Topic order saved', 'success');
+    } catch (error) {
+      setModules(previous);
+      const apiMessage = error?.response?.data?.message;
+      showToast(apiMessage || 'Could not save topic order', 'error');
     } finally {
       setSaving(false);
     }
@@ -327,175 +322,227 @@ export default function AdminCourseEditor() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  useEffect(() => {
-    if (!newlyCreatedModuleId && !newlyCreatedLessonId) return;
-    const timer = setTimeout(() => {
-      setNewlyCreatedModuleId(null);
-      setNewlyCreatedLessonId(null);
-    }, 3500);
-    return () => clearTimeout(timer);
-  }, [newlyCreatedModuleId, newlyCreatedLessonId]);
-
   if (loading) return <LoadingSpinner />;
 
-  return (
-    <div className="course-editor-new">
-      {/* Header */}
-      <div className="editor-header">
-        <Link to="/admin/courses" className="back-button">
-          ← Back to Courses
-        </Link>
-        <div className="header-title">
-          <h1>{isNewCourse ? 'Create New Course' : course?.title}</h1>
-          {!isNewCourse && <p>{course?.status}</p>}
+  const statusMeta = course ? (STATUS_META[course.status] || STATUS_META.draft) : null;
+
+  /* ─── New course: full-width form ─────────────── */
+  if (isNewCourse) {
+    return (
+      <div className="ace-new-course">
+        <div className="ace-new-header">
+          <Link to="/admin/courses" className="ace-back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
+            All Courses
+          </Link>
+          <h1 className="ace-new-title">Create New Course</h1>
+          <p className="ace-new-subtitle">Fill in the details below to publish your first course.</p>
         </div>
-        {!isNewCourse && (
-          <div className="header-actions">
-            <button
-              onClick={() => {
-                setShowCourseDetails(true);
-                setViewMode('course');
-              }}
-              className="btn-primary"
-            >
-              View Course
-            </button>
-          </div>
+        <div className="ace-new-body">
+          <CourseForm onSave={handleSaveCourse} saving={saving} />
+        </div>
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            position="top-center"
+            onClose={() => setToast(null)}
+          />
         )}
       </div>
+    );
+  }
 
-      <div className="editor-layout">
-        {/* Left Panel - Modules List */}
-        {!isNewCourse && (
-          <div className="editor-left-panel">
-            <div className="panel-header">
-              <h2>Modules</h2>
-              <button onClick={handleAddModule} className="btn-add">
-                Add
+  /* ─── Existing course: two-panel layout ───────── */
+  return (
+    <div className="ace-layout">
+      {/* Left Sidebar */}
+      <aside className="ace-sidebar">
+        {/* Sidebar header */}
+        <div className="ace-sidebar-top">
+          <Link to="/admin/courses" className="ace-back-link">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
+            All Courses
+          </Link>
+
+          <div className="ace-course-info">
+            <p className="ace-course-name">{course?.title || 'Untitled Course'}</p>
+            {statusMeta && (
+              <span
+                className="ace-course-status"
+                style={{ color: statusMeta.color, background: statusMeta.bg }}
+              >
+                {statusMeta.label}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Navigation tree */}
+        <div className="ace-sidebar-nav">
+          <ModuleList
+            modules={modules}
+            selectedModuleId={selectedModuleId}
+            selectedLessonId={selectedLesson?._id}
+            newlyCreatedModuleId={newlyCreatedModuleId}
+            newlyCreatedLessonId={newlyCreatedLessonId}
+            viewMode={viewMode}
+            onSelectCourse={() => setViewMode('course')}
+            onSelectModule={handleEditModule}
+            onEditModule={handleEditModule}
+            onDeleteModule={handleDeleteModule}
+            onAddLesson={handleAddLesson}
+            onSelectLesson={handleSelectLesson}
+            onDeleteLesson={handleDeleteLesson}
+            onReorderModules={handleReorderModules}
+            onReorderLessons={handleReorderLessons}
+          />
+        </div>
+
+        {/* Add module button */}
+        <div className="ace-sidebar-footer">
+          <button type="button" className="ace-add-module-btn" onClick={handleAddModule}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            Add Module
+          </button>
+        </div>
+      </aside>
+
+      {/* Right Panel */}
+      <main className="ace-panel">
+        {viewMode === 'course' && (
+          <div className="ace-panel-inner">
+            <div className="ace-panel-header">
+              <div>
+                <h2 className="ace-panel-title">Course Details</h2>
+                <p className="ace-panel-subtitle">Edit the core information for this course</p>
+              </div>
+            </div>
+            <CourseForm course={course} onSave={handleSaveCourse} saving={saving} />
+          </div>
+        )}
+
+        {viewMode === 'module' && selectedModule && (
+          <div className="ace-panel-inner">
+            <div className="ace-panel-header">
+              <div>
+                <h2 className="ace-panel-title">Edit Module</h2>
+                <p className="ace-panel-subtitle">{selectedModule.title}</p>
+              </div>
+              <button
+                type="button"
+                className="ace-panel-back-btn"
+                onClick={() => setViewMode('course')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
+                Overview
               </button>
             </div>
-
-            <ModuleList
-              courseId={courseId}
-              modules={modules}
-              selectedModuleId={selectedModuleId}
-              newlyCreatedModuleId={newlyCreatedModuleId}
-              newlyCreatedLessonId={newlyCreatedLessonId}
-              onSelectModule={handleSelectModule}
-              onEditModule={handleEditModule}
-              onDeleteModule={handleDeleteModule}
-              onAddLesson={handleAddLesson}
-              onSelectLesson={handleSelectLesson}
-              onDeleteLesson={handleDeleteLesson}
-            />
+            <ModuleForm module={selectedModule} onSave={handleSaveModule} saving={saving} />
           </div>
         )}
 
-        {/* Right Panel - Editing Form */}
-        <div className="editor-right-panel">
-          {!showCourseDetails ? (
-            <div className="empty-state">
-              <p>Click <strong>View Course</strong> to open course details.</p>
-            </div>
-          ) : viewMode === 'course' ? (
-            <div className="form-container">
-              <h2>Course Details</h2>
-              <CourseForm
-                course={course}
-                onSave={handleSaveCourse}
-                saving={saving}
-              />
-            </div>
-          ) : null}
-
-          {showCourseDetails && viewMode === 'module' && selectedModule && (
-            <div className="form-container">
-              <div className="form-header">
-                <button className="btn-back" onClick={() => setViewMode('course')}>
-                  ← Back
-                </button>
-                <h2>Module: {selectedModule.title}</h2>
+        {viewMode === 'lesson' && selectedLesson && (
+          <div className="ace-panel-inner">
+            <div className="ace-panel-header">
+              <div>
+                <h2 className="ace-panel-title">Edit topic</h2>
+                <p className="ace-panel-subtitle">{selectedLesson.title}</p>
               </div>
-              <ModuleForm
-                module={selectedModule}
-                onSave={handleSaveModule}
-                saving={saving}
-              />
+              <button
+                type="button"
+                className="ace-panel-back-btn"
+                onClick={() => {
+                  setViewMode('module');
+                  const mod = modules.find((m) => m._id === selectedLessonModuleId);
+                  if (mod) { setSelectedModule(mod); }
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
+                Module
+              </button>
             </div>
-          )}
+            <LessonForm lesson={selectedLesson} onSave={handleSaveLesson} saving={saving} />
+          </div>
+        )}
 
-          {showCourseDetails && viewMode === 'lesson' && editingLesson && (
-            <div className="form-container">
-              <div className="form-header">
-                <button
-                  className="btn-back"
-                  onClick={() => {
-                    setViewMode('module');
-                    setSelectedLesson(null);
-                    setEditingLesson(null);
-                  }}
-                >
-                  ← Back to Module
-                </button>
-                <h2>Lesson: {editingLesson.title}</h2>
-              </div>
-              <LessonForm
-                lesson={editingLesson}
-                onSave={handleSaveLesson}
-                saving={saving}
-              />
-            </div>
-          )}
-        </div>
-      </div>
+        {viewMode === 'course' && !course && (
+          <div className="ace-empty-state">
+            <p>Select something from the sidebar to start editing.</p>
+          </div>
+        )}
+      </main>
 
-      {/* Toast Notifications */}
-      {toast && <Toast message={toast.message} type={toast.type} />}
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          position="top-center"
+          onClose={() => setToast(null)}
+        />
+      )}
 
+      {/* Add Module modal */}
       {showModuleModal && (
-        <div className="inline-modal-overlay" onClick={() => setShowModuleModal(false)}>
-          <div className="inline-modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Add Module</h3>
-            <p>Enter a title for your new module.</p>
+        <div className="ace-modal-overlay" onClick={() => setShowModuleModal(false)}>
+          <div className="ace-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ace-modal-header">
+              <h3>New Module</h3>
+              <button className="ace-modal-close" onClick={() => setShowModuleModal(false)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <p className="ace-modal-desc">Enter a title for your new module.</p>
             <input
               type="text"
               value={moduleTitleInput}
               onChange={(e) => setModuleTitleInput(e.target.value)}
-              placeholder="e.g., Module 1: Fundamentals"
-              className="inline-modal-input"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateModule()}
+              placeholder="e.g., Introduction to React"
+              className="ace-modal-input"
               autoFocus
             />
-            <div className="inline-modal-actions">
-              <button type="button" className="btn-secondary" onClick={() => setShowModuleModal(false)}>
+            <div className="ace-modal-actions">
+              <button type="button" className="ace-modal-cancel" onClick={() => setShowModuleModal(false)}>
                 Cancel
               </button>
-              <button type="button" className="btn-primary" onClick={handleCreateModule} disabled={saving}>
-                {saving ? 'Adding...' : 'Add Module'}
+              <button type="button" className="ace-modal-confirm" onClick={handleCreateModule} disabled={saving}>
+                {saving ? 'Creating…' : 'Create Module'}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Add Lesson modal */}
       {showLessonModal && (
-        <div className="inline-modal-overlay" onClick={() => setShowLessonModal(false)}>
-          <div className="inline-modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Add Lesson</h3>
-            <p>Enter a lesson title for <strong>{lessonTargetModule?.title || 'selected module'}</strong>.</p>
+        <div className="ace-modal-overlay" onClick={() => setShowLessonModal(false)}>
+          <div className="ace-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ace-modal-header">
+              <h3>New topic</h3>
+              <button className="ace-modal-close" onClick={() => setShowLessonModal(false)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <p className="ace-modal-desc">
+              Adding to <strong>{lessonTargetModule?.title}</strong>
+            </p>
             <input
               type="text"
               value={lessonTitleInput}
               onChange={(e) => setLessonTitleInput(e.target.value)}
-              placeholder="e.g., Lesson 1: Introduction"
-              className="inline-modal-input"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateLesson()}
+              placeholder="e.g., Introduction to Hooks"
+              className="ace-modal-input"
               autoFocus
             />
-            <div className="inline-modal-actions">
-              <button type="button" className="btn-secondary" onClick={() => setShowLessonModal(false)}>
+            <div className="ace-modal-actions">
+              <button type="button" className="ace-modal-cancel" onClick={() => setShowLessonModal(false)}>
                 Cancel
               </button>
-              <button type="button" className="btn-primary" onClick={handleCreateLesson} disabled={saving}>
-                {saving ? 'Adding...' : 'Add Lesson'}
+              <button type="button" className="ace-modal-confirm" onClick={handleCreateLesson} disabled={saving}>
+                {saving ? 'Creating…' : 'Create topic'}
               </button>
             </div>
           </div>

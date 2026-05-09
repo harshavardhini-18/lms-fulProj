@@ -1,6 +1,11 @@
 import AppError from '../utils/AppError.js';
 import { pool } from '../config/postgres.js';
 
+const LESSON_READ_MODE = String(process.env.LESSON_READ_MODE || 'primary_only').toLowerCase();
+const ENABLE_LEGACY_VIDEO_FALLBACK = LESSON_READ_MODE === 'legacy_fallback';
+const MIRROR_PRIMARY_VIDEO_TO_LEGACY_TABLE =
+  String(process.env.MIRROR_PRIMARY_VIDEO_TO_LEGACY_TABLE || 'false').toLowerCase() === 'true';
+
 function toSlug(text = '') {
   return String(text)
     .trim()
@@ -233,6 +238,10 @@ async function getCourseTags(courseId) {
 }
 
 function mapCourseRow(row, tags = []) {
+  const toCount = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
   return {
     _id: String(row.id),
     id: row.id,
@@ -256,16 +265,23 @@ function mapCourseRow(row, tags = []) {
     updatedBy: row.updated_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    moduleCount: toCount(row.module_count),
+    lessonCount: toCount(row.lesson_count),
   };
 }
 
 function mapLessonRow(row, videoRow) {
-  const fallbackVideoUrl = videoRow?.video_url || '';
-  const fallbackVideoDuration = Number(videoRow?.duration_seconds || 0);
+  const fallbackVideoUrl = ENABLE_LEGACY_VIDEO_FALLBACK ? videoRow?.video_url || '' : '';
+  const fallbackVideoDuration = ENABLE_LEGACY_VIDEO_FALLBACK
+    ? Number(videoRow?.duration_seconds || 0)
+    : 0;
+  const emptyContentDoc = { type: 'doc', content: [] };
   let contentJson = row.content_json;
   if (!contentJson || typeof contentJson !== 'object' || Array.isArray(contentJson)) {
-    contentJson = { type: 'doc', content: [] };
+    contentJson = emptyContentDoc;
   }
+  const resolvedVideoUrl = String(row.primary_video_url || fallbackVideoUrl || '').trim();
+  const hasVideo = Boolean(resolvedVideoUrl);
 
   return {
     _id: String(row.id),
@@ -276,6 +292,9 @@ function mapLessonRow(row, videoRow) {
     contentType: row.content_type || 'video',
     textContent: row.text_content || '',
     contentJson,
+    contentIssue: contentJson === emptyContentDoc
+      ? 'Invalid lesson content format. Falling back to an empty document.'
+      : '',
     status: String(row.status || 'draft').toLowerCase(),
     thumbnailUrl: row.thumbnail_url || '',
     videoType: String(row.video_type || 'mp4').toLowerCase(),
@@ -289,11 +308,13 @@ function mapLessonRow(row, videoRow) {
     quizId: row.quiz_id || '',
     resources: Array.isArray(row.resources) ? row.resources : [],
     assignmentDetails: row.assignment_details || {},
-    videoUrl: row.primary_video_url || fallbackVideoUrl,
+    videoUrl: resolvedVideoUrl,
     videoDuration:
       row.primary_video_duration === null || row.primary_video_duration === undefined
         ? fallbackVideoDuration
         : Number(row.primary_video_duration),
+    hasVideo,
+    videoIssue: hasVideo ? '' : 'Video is not available for this lesson yet.',
     order: Number(row.position || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -313,6 +334,8 @@ async function getVideoBySubtopicId(subtopicId) {
 }
 
 async function upsertPrimaryVideo(subtopicId, lessonData) {
+  if (!MIRROR_PRIMARY_VIDEO_TO_LEGACY_TABLE) return null;
+
   const videoUrl = String(lessonData.videoUrl || '').trim();
   const contentType = String(lessonData.contentType || 'video').trim();
   const duration = Number(lessonData.videoDuration || 0);
@@ -439,30 +462,44 @@ export async function createCourse(payload, actor) {
 }
 
 export async function listCourses(query = {}) {
-  const conditions = ['is_deleted = FALSE'];
+  const conditions = ['c.is_deleted = FALSE'];
   const params = [];
 
   if (query.createdBy) {
     params.push(parseId(query.createdBy, 'createdBy'));
-    conditions.push(`created_by = $${params.length}`);
+    conditions.push(`c.created_by = $${params.length}`);
   }
 
   if (query.status) {
     params.push(String(query.status).toLowerCase());
-    conditions.push(`status = $${params.length}`);
+    conditions.push(`c.status = $${params.length}`);
   } else {
     const includeAll = String(query.includeAll || '').toLowerCase() === 'true';
     if (!includeAll) {
-      conditions.push(`status = 'published'`);
+      conditions.push(`c.status = 'published'`);
     }
   }
 
   const rows = await pool.query(
-    `SELECT *
-     FROM courses
+    `SELECT c.*,
+            COALESCE(mc.module_count, 0)::int AS module_count,
+            COALESCE(lc.lesson_count, 0)::int AS lesson_count
+     FROM courses c
+     LEFT JOIN (
+       SELECT course_id, COUNT(*) AS module_count
+       FROM modules
+       WHERE is_deleted = FALSE
+       GROUP BY course_id
+     ) mc ON mc.course_id = c.id
+     LEFT JOIN (
+       SELECT m.course_id, COUNT(s.id) AS lesson_count
+       FROM subtopics s
+       JOIN modules m ON m.id = s.module_id
+       WHERE s.is_deleted = FALSE AND m.is_deleted = FALSE
+       GROUP BY m.course_id
+     ) lc ON lc.course_id = c.id
      WHERE ${conditions.join(' AND ')}
-     ORDER BY created_at DESC`
-    ,
+     ORDER BY c.created_at DESC`,
     params
   );
 
@@ -470,6 +507,41 @@ export async function listCourses(query = {}) {
     rows.rows.map(async (row) => mapCourseRow(row, await getCourseTags(row.id)))
   );
   return withTags;
+}
+
+/**
+ * Non-deleted courses only, keyed by string id — for admin cards when list payload is stale.
+ */
+export async function getCourseCountsMap() {
+  const rows = await pool.query(
+    `SELECT c.id,
+            COALESCE(mc.module_count, 0)::int AS module_count,
+            COALESCE(lc.lesson_count, 0)::int AS lesson_count
+     FROM courses c
+     LEFT JOIN (
+       SELECT course_id, COUNT(*) AS module_count
+       FROM modules
+       WHERE is_deleted = FALSE
+       GROUP BY course_id
+     ) mc ON mc.course_id = c.id
+     LEFT JOIN (
+       SELECT m.course_id, COUNT(s.id) AS lesson_count
+       FROM subtopics s
+       JOIN modules m ON m.id = s.module_id
+       WHERE s.is_deleted = FALSE AND m.is_deleted = FALSE
+       GROUP BY m.course_id
+     ) lc ON lc.course_id = c.id
+     WHERE c.is_deleted = FALSE`
+  );
+  const out = {};
+  for (const row of rows.rows) {
+    const id = String(row.id);
+    out[id] = {
+      moduleCount: Number(row.module_count) || 0,
+      lessonCount: Number(row.lesson_count) || 0,
+    };
+  }
+  return out;
 }
 
 export async function getCourseById(courseId) {
@@ -513,7 +585,9 @@ export async function getCourseWithModules(courseId, actor) {
 
   const lessonByModule = new Map();
   for (const lessonRow of lessonResult.rows) {
-    const video = await getVideoBySubtopicId(lessonRow.id);
+    const video = ENABLE_LEGACY_VIDEO_FALLBACK
+      ? await getVideoBySubtopicId(lessonRow.id)
+      : null;
     const mapped = mapLessonRow(lessonRow, video);
     const bucket = lessonByModule.get(lessonRow.module_id) || [];
     bucket.push(mapped);
@@ -561,7 +635,7 @@ export async function getModule(moduleId, actor) {
 
   const lessons = [];
   for (const row of lessonResult.rows) {
-    const video = await getVideoBySubtopicId(row.id);
+    const video = ENABLE_LEGACY_VIDEO_FALLBACK ? await getVideoBySubtopicId(row.id) : null;
     lessons.push(mapLessonRow(row, video));
   }
 
@@ -595,7 +669,9 @@ export async function getLesson(moduleId, lessonId, actor) {
   const lessonRow = lessonResult.rows[0];
   if (!lessonRow) throw new AppError('Lesson not found', 404);
 
-  const video = await getVideoBySubtopicId(parsedLessonId);
+  const video = ENABLE_LEGACY_VIDEO_FALLBACK
+    ? await getVideoBySubtopicId(parsedLessonId)
+    : null;
   return mapLessonRow(lessonRow, video);
 }
 
@@ -837,7 +913,7 @@ export async function createLesson(courseId, moduleId, lessonData, actor) {
       position
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15,
-      $16, $17, $18, $19, $20::jsonb, $21::jsonb, $22
+      $16, $17, $18, $19, $20, $21::jsonb, $22::jsonb, $23
     )
     RETURNING *`,
     [

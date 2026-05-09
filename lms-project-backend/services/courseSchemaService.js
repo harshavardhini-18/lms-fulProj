@@ -318,6 +318,26 @@ export async function ensureCourseSchema() {
 	`);
 
 	await pool.query(`
+		CREATE TABLE IF NOT EXISTS quizzes (
+			id BIGSERIAL PRIMARY KEY,
+			course_id BIGINT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+			subtopic_id BIGINT NULL REFERENCES subtopics(id) ON DELETE SET NULL,
+			title VARCHAR(255) NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			trigger_timestamp_seconds INTEGER NOT NULL DEFAULT 0 CHECK (trigger_timestamp_seconds >= 0),
+			questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+			status VARCHAR(20) NOT NULL DEFAULT 'active'
+				CHECK (status IN ('active', 'inactive')),
+			created_by BIGINT NOT NULL REFERENCES users(id),
+			updated_by BIGINT NULL REFERENCES users(id),
+			is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+			deleted_at TIMESTAMPTZ NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`);
+
+	await pool.query(`
 		CREATE TABLE IF NOT EXISTS tags (
 			id BIGSERIAL PRIMARY KEY,
 			name VARCHAR(100) NOT NULL UNIQUE,
@@ -383,6 +403,16 @@ export async function ensureCourseSchema() {
 	`);
 
 	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_quizzes_course_active
+		ON quizzes(course_id, is_deleted, status, trigger_timestamp_seconds)
+	`);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_quizzes_subtopic_active
+		ON quizzes(subtopic_id, is_deleted, status)
+	`);
+
+	await pool.query(`
 		DO $$
 		BEGIN
 			IF NOT EXISTS (
@@ -439,6 +469,22 @@ export async function ensureCourseSchema() {
 			) THEN
 				CREATE TRIGGER videos_set_updated_at
 				BEFORE UPDATE ON videos
+				FOR EACH ROW
+				EXECUTE FUNCTION set_updated_at();
+			END IF;
+		END;
+		$$;
+	`);
+
+	await pool.query(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_trigger
+				WHERE tgname = 'quizzes_set_updated_at'
+			) THEN
+				CREATE TRIGGER quizzes_set_updated_at
+				BEFORE UPDATE ON quizzes
 				FOR EACH ROW
 				EXECUTE FUNCTION set_updated_at();
 			END IF;

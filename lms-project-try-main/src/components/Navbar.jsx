@@ -18,7 +18,7 @@ function Navbar({ role = 'student' }) {
         { label: 'Dashboard', path: '/admin/dashboard' },
         { label: 'User Management', path: '/admin/users' },
         { label: 'Courses Management', path: '/admin/courses' },
-        { label: 'Reports', path: '/admin/reports' },
+        { label: 'Quizzes', path: '/admin/quizzes' },
         { label: 'Profile', path: '/admin/profile' },
       ]
     }
@@ -27,7 +27,7 @@ function Navbar({ role = 'student' }) {
       return [
         { label: 'Dashboard', path: '/staff/dashboard' },
         { label: 'Courses Management', path: '/staff/courses' },
-        { label: 'Reports', path: '/staff/reports' },
+        { label: 'Quizzes', path: '/staff/quizzes' },
         { label: 'Profile', path: '/staff/profile' },
       ]
     }
