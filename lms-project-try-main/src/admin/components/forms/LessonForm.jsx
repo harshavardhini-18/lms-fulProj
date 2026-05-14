@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import LessonInlineContentEditor from './LessonInlineContentEditor';
+import QuizPreviewModal from '../quiz/QuizPreviewModal';
+import { adminQuizService } from '../../services/adminQuizService';
 import './LessonForm.css';
 
 const EMPTY_DOC = { type: 'doc', content: [] };
 
-const STEP_LABELS = ['Topic info', 'Video', 'Content'];
+const STEP_LABELS = ['Topic info', 'Video', 'Content', 'Quiz info'];
 
 /** Render a TipTap doc node as React for the student preview */
 function renderPreviewNode(node, key) {
@@ -45,6 +47,54 @@ function renderPreviewNode(node, key) {
   return null;
 }
 
+function extractYoutubeId(url) {
+  const m = String(url || '').match(/^.*(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]+).*/);
+  return m && m[1] && m[1].length >= 6 ? m[1] : null;
+}
+
+function extractVimeoId(url) {
+  const m = String(url || '').match(/vimeo\.com\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+function VideoInlinePreview({ url }) {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return null;
+
+  if (/youtu/i.test(trimmed)) {
+    const id = extractYoutubeId(trimmed);
+    if (!id) return <p className="lf-video-preview-error">Could not parse a YouTube ID from that URL.</p>;
+    return (
+      <iframe
+        className="lf-video-preview-frame"
+        src={`https://www.youtube.com/embed/${id}`}
+        title="Video preview"
+        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    );
+  }
+  if (/vimeo/i.test(trimmed)) {
+    const id = extractVimeoId(trimmed);
+    if (!id) return <p className="lf-video-preview-error">Could not parse a Vimeo ID from that URL.</p>;
+    return (
+      <iframe
+        className="lf-video-preview-frame"
+        src={`https://player.vimeo.com/video/${id}`}
+        title="Video preview"
+        allow="autoplay; fullscreen"
+        allowFullScreen
+      />
+    );
+  }
+  return (
+    <video className="lf-video-preview-frame" controls preload="metadata">
+      <source src={trimmed} />
+      Your browser does not support video playback.
+    </video>
+  );
+}
+
 function hasRenderableContent(doc) {
   if (!doc || typeof doc !== 'object') return false;
   const stack = [doc];
@@ -69,12 +119,54 @@ export default function LessonForm({ lesson, onSave, saving }) {
     videoType: 'mp4',
     thumbnailUrl: '',
     contentJson: EMPTY_DOC,
+    quizId: '',
   });
 
   const [saveError, setSaveError] = useState('');
   const [stepError, setStepError] = useState('');
   const [contentViewMode, setContentViewMode] = useState('edit'); // 'edit' | 'preview'
   const thumbFileRef = useRef(null);
+
+  const [quizOptions, setQuizOptions] = useState([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(false);
+  const [quizPreview, setQuizPreview] = useState(null);
+
+  const loadQuizOptions = useCallback(async () => {
+    setQuizzesLoading(true);
+    try {
+      const all = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const res = await adminQuizService.list({
+          page,
+          pageSize: 100,
+          sort: 'title:asc',
+          status: 'published',
+        });
+        all.push(...(res.data || []));
+        totalPages = res.pagination?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages && page <= 50);
+      setQuizOptions(all);
+    } catch {
+      setStepError('Could not load quizzes. Try Refresh or check you are logged in.');
+    } finally {
+      setQuizzesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (step === 4) loadQuizOptions();
+  }, [step, loadQuizOptions]);
+
+  // Auto-refresh the quiz list when the user comes back from the "Add quiz" tab.
+  useEffect(() => {
+    if (step !== 4) return;
+    function onFocus() { loadQuizOptions(); }
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [step, loadQuizOptions]);
 
   useEffect(() => {
     if (lesson) {
@@ -87,6 +179,7 @@ export default function LessonForm({ lesson, onSave, saving }) {
         videoType: lesson.videoType || 'mp4',
         thumbnailUrl: lesson.thumbnailUrl || '',
         contentJson: lesson.contentJson || EMPTY_DOC,
+        quizId: lesson.quizId ? String(lesson.quizId) : '',
       });
       setSaveError('');
       setStepError('');
@@ -138,7 +231,7 @@ export default function LessonForm({ lesson, onSave, saving }) {
         return;
       }
     }
-    setStep((s) => Math.min(3, s + 1));
+    setStep((s) => Math.min(4, s + 1));
   };
 
   const goBack = () => {
@@ -148,7 +241,7 @@ export default function LessonForm({ lesson, onSave, saving }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (step !== 3) return;
+    if (step !== 4) return;
     setSaveError('');
 
     if (!formData.title.trim()) {
@@ -181,10 +274,31 @@ export default function LessonForm({ lesson, onSave, saving }) {
       videoType: formData.videoType,
       thumbnailUrl: formData.thumbnailUrl,
       contentJson: formData.contentJson,
+      quizId: formData.quizId || '',
     });
   };
 
   const contentHasData = hasRenderableContent(formData.contentJson);
+
+  async function handleOpenQuizPreview() {
+    if (!formData.quizId) return;
+    setStepError('');
+    try {
+      const quiz = await adminQuizService.getById(formData.quizId);
+      const questions = (quiz.questions || []).map((q) => ({
+        prompt: q.prompt,
+        type: q.type,
+        options: q.options || [],
+        acceptedAnswers: q.acceptedAnswers || [],
+        answerValidationMode: q.answerValidationMode || 'strict',
+        codeImageUrl: q.codeImageUrl || '',
+        effectivePoints: q.effectivePoints ?? q.points ?? 1,
+      }));
+      setQuizPreview({ title: quiz.title || 'Quiz', questions });
+    } catch {
+      setStepError('Could not load quiz for preview.');
+    }
+  }
 
   return (
     <>
@@ -277,6 +391,11 @@ export default function LessonForm({ lesson, onSave, saving }) {
                 placeholder="YouTube, Vimeo, or direct file URL"
                 className="lf-input"
               />
+              {formData.videoUrl && (
+                <div className="lf-video-preview-wrap">
+                  <VideoInlinePreview url={formData.videoUrl} />
+                </div>
+              )}
             </div>
 
             <div className="lf-row">
@@ -409,6 +528,59 @@ export default function LessonForm({ lesson, onSave, saving }) {
           </div>
         )}
 
+        {/* Step 4 — Quiz (optional, one per topic) */}
+        {step === 4 && (
+          <div className="lf-section">
+            <h3 className="lf-section-title">Quiz info</h3>
+            <p className="lf-section-lead">
+              Link one quiz from your bank to this topic. Pick from existing quizzes, or open the Quizzes admin to build a new one.
+            </p>
+
+            <div className="lf-quiz-card">
+              <label className="lf-label" htmlFor="lf-topic-quiz">Topic quiz</label>
+              <div className="lf-quiz-controls">
+                <div className="lf-quiz-select-wrap">
+                  <select
+                    id="lf-topic-quiz"
+                    name="quizId"
+                    value={formData.quizId}
+                    onChange={handleChange}
+                    className="lf-select lf-quiz-select"
+                    disabled={quizzesLoading}
+                  >
+                    <option value="">
+                      {quizzesLoading ? 'Loading quizzes…' : '— No quiz —'}
+                    </option>
+                    {quizOptions.map((q) => (
+                      <option key={q.id} value={String(q.id)}>
+                        {q.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  className="lf-quiz-preview-btn"
+                  onClick={handleOpenQuizPreview}
+                  disabled={!formData.quizId || quizzesLoading}
+                  title={formData.quizId ? 'Preview this quiz as a student' : 'Select a quiz to enable preview'}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  Preview
+                </button>
+              </div>
+
+              {!formData.quizId && !quizzesLoading && (
+                <p className="lf-quiz-hint">Optional — you can save the topic without a quiz.</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {saveError && (
           <div className="lf-error">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
@@ -430,12 +602,12 @@ export default function LessonForm({ lesson, onSave, saving }) {
                 Back
               </button>
             )}
-            {step < 3 && (
+            {step < 4 && (
               <button type="button" className="lf-next-btn" onClick={goNext} disabled={saving}>
                 Next
               </button>
             )}
-            {step === 3 && (
+            {step === 4 && (
               <button type="submit" disabled={saving} className="lf-save-btn">
                 {saving ? (
                   <>
@@ -450,6 +622,14 @@ export default function LessonForm({ lesson, onSave, saving }) {
           </div>
         </div>
       </form>
+
+      {quizPreview && (
+        <QuizPreviewModal
+          quizTitle={quizPreview.title}
+          questions={quizPreview.questions}
+          onClose={() => setQuizPreview(null)}
+        />
+      )}
     </>
   );
 }

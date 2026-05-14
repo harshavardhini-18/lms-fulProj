@@ -95,3 +95,13 @@ export function requireAdmin(req, res, next) {
 	next();
 
 }
+
+export function requireStudent(req, res, next) {
+	if (!req.user) {
+		return next(new AppError('Authentication required. Provide x-user-id header.', 401));
+	}
+	if (req.user.role !== 'student') {
+		return next(new AppError('Student access only', 403));
+	}
+	next();
+}

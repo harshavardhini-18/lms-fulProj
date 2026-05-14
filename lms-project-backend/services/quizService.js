@@ -1,5 +1,11 @@
 import AppError from '../utils/AppError.js';
 import { pool } from '../config/postgres.js';
+import {
+  insertQuestionRow,
+  sanitizeQuestionPayload,
+} from './questionService.js';
+
+const STATUSES = ['draft', 'published', 'archived'];
 
 function parseId(value, label) {
   const parsed = Number(value);
@@ -9,388 +15,394 @@ function parseId(value, label) {
   return parsed;
 }
 
-const QUESTION_TYPES = ['mcq', 'fill_blank', 'code_image'];
-
-function stripAnswersFromQuestions(questions = []) {
-  return questions.map((question) => {
-    const type = question?.type || 'mcq';
-    if (type === 'fill_blank') {
-      const { acceptedAnswers, ...rest } = question;
-      return rest;
-    }
-    if (type === 'code_image') {
-      return {
-        ...question,
-        choices: Array.isArray(question?.choices)
-          ? question.choices.map(({ isCorrect, ...choice }) => choice)
-          : [],
-      };
-    }
-    // mcq default
-    return {
-      ...question,
-      choices: Array.isArray(question?.choices)
-        ? question.choices.map(({ isCorrect, ...choice }) => choice)
-        : [],
-    };
-  });
-}
-
-function sanitizeQuestions(rawQuestions = []) {
-  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
-    throw new AppError('At least one quiz question is required', 400);
-  }
-
-  return rawQuestions.map((question, qIndex) => {
-    const questionText = String(question?.question || '').trim();
-    if (!questionText) throw new AppError(`Question ${qIndex + 1} text is required`, 400);
-
-    const type = QUESTION_TYPES.includes(question?.type) ? question.type : 'mcq';
-
-    if (type === 'fill_blank') {
-      const raw = question?.acceptedAnswers;
-      const acceptedAnswers = Array.isArray(raw)
-        ? raw.map((a) => String(a || '').trim().toLowerCase()).filter(Boolean)
-        : [String(raw || '').trim().toLowerCase()].filter(Boolean);
-      if (acceptedAnswers.length === 0) {
-        throw new AppError(`Question ${qIndex + 1} (fill_blank) requires at least one accepted answer`, 400);
-      }
-      return {
-        id: String(question?.id || `q-${qIndex + 1}`),
-        type: 'fill_blank',
-        question: questionText,
-        acceptedAnswers,
-      };
-    }
-
-    if (type === 'code_image') {
-      const codeImageUrl = String(question?.codeImageUrl || '').trim();
-      if (!codeImageUrl) {
-        throw new AppError(`Question ${qIndex + 1} (code_image) requires a code image`, 400);
-      }
-      const choices = Array.isArray(question?.choices)
-        ? question.choices.map((choice, cIndex) => ({
-            id: String(choice?.id || `${qIndex + 1}-${cIndex + 1}`),
-            label: String(choice?.label || '').trim(),
-            isCorrect: Boolean(choice?.isCorrect),
-          }))
-        : [];
-      if (choices.length < 2) throw new AppError(`Question ${qIndex + 1} (code_image) requires at least 2 choices`, 400);
-      if (choices.some((c) => !c.label)) throw new AppError(`Question ${qIndex + 1} has an empty choice`, 400);
-      if (!choices.some((c) => c.isCorrect)) throw new AppError(`Question ${qIndex + 1} must have one correct choice`, 400);
-      return {
-        id: String(question?.id || `q-${qIndex + 1}`),
-        type: 'code_image',
-        question: questionText,
-        codeImageUrl,
-        choices,
-      };
-    }
-
-    // mcq
-    const choices = Array.isArray(question?.choices)
-      ? question.choices.map((choice, cIndex) => ({
-          id: String(choice?.id || `${qIndex + 1}-${cIndex + 1}`),
-          label: String(choice?.label || '').trim(),
-          isCorrect: Boolean(choice?.isCorrect),
-        }))
-      : [];
-
-    if (choices.length < 2) throw new AppError(`Question ${qIndex + 1} requires at least 2 choices`, 400);
-    if (choices.some((choice) => !choice.label)) throw new AppError(`Question ${qIndex + 1} has an empty choice`, 400);
-    if (!choices.some((choice) => choice.isCorrect)) throw new AppError(`Question ${qIndex + 1} must have one correct choice`, 400);
-
-    return {
-      id: String(question?.id || `q-${qIndex + 1}`),
-      type: 'mcq',
-      question: questionText,
-      choices,
-    };
-  });
-}
-
-function mapQuizRow(row, includeAnswers = false) {
-  const questions = Array.isArray(row.questions) ? row.questions : [];
+function mapQuestionRow(row) {
   return {
     _id: String(row.id),
     id: row.id,
-    courseId: row.course_id,
-    subtopicId: row.subtopic_id,
+    type: row.type,
+    prompt: row.prompt,
+    codeImageUrl: row.code_image_url || '',
+    options: Array.isArray(row.options) ? row.options : [],
+    acceptedAnswers: Array.isArray(row.accepted_answers) ? row.accepted_answers : [],
+    answerValidationMode: row.fill_blank_validation_mode || 'strict',
+    categoryId: row.category_id,
+    categoryName: row.category_name || null,
+    difficulty: row.difficulty,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    points: Number(row.points || 1),
+    status: row.status,
+  };
+}
+
+function mapQuizRow(row, questions = [], questionCount = null) {
+  return {
+    _id: String(row.id),
+    id: row.id,
     title: row.title,
     description: row.description || '',
-    triggerTimestampSeconds: Number(row.trigger_timestamp_seconds || 0),
+    categoryId: row.category_id,
+    categoryName: row.category_name || null,
     status: row.status,
-    questions: includeAnswers ? questions : stripAnswersFromQuestions(questions),
+    totalPoints: Number(row.total_points || 0),
+    questionCount: questionCount !== null ? questionCount : questions.length,
+    questions,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-async function getCourseIdFromSubtopic(subtopicId) {
-  const result = await pool.query(
-    `SELECT m.course_id, s.timestamp_end
-     FROM subtopics s
-     JOIN modules m ON m.id = s.module_id
-     WHERE s.id = $1
-       AND s.is_deleted = FALSE
-       AND m.is_deleted = FALSE`,
-    [subtopicId]
-  );
-  return result.rows[0] || null;
+const SORTABLE = {
+  updated_at: 'q.updated_at',
+  created_at: 'q.created_at',
+  title: 'q.title',
+};
+
+function buildSort(sort) {
+  const raw = String(sort || 'updated_at:desc').split(':');
+  const field = SORTABLE[raw[0]] || SORTABLE.updated_at;
+  const dir = String(raw[1] || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  return `${field} ${dir}`;
 }
 
-async function validateCourseExists(courseId) {
-  const result = await pool.query(
-    `SELECT id
-     FROM courses
-     WHERE id = $1
-       AND is_deleted = FALSE`,
-    [courseId]
+async function validateCategoryExists(categoryId, client = pool) {
+  if (!categoryId) return;
+  const r = await client.query(
+    `SELECT 1 FROM quiz_categories WHERE id = $1 AND is_deleted = FALSE`,
+    [categoryId]
   );
-  if (!result.rows[0]) throw new AppError('Course not found', 404);
+  if (!r.rows[0]) throw new AppError('Category not found', 404);
+}
+
+async function loadQuizQuestions(quizId, client = pool) {
+  const result = await client.query(
+    `SELECT qq.position, qq.points_override, q.*,
+            c.name AS category_name
+     FROM quiz_questions qq
+     JOIN questions q ON q.id = qq.question_id AND q.is_deleted = FALSE
+     LEFT JOIN quiz_categories c ON c.id = q.category_id AND c.is_deleted = FALSE
+     WHERE qq.quiz_id = $1
+     ORDER BY qq.position ASC, qq.created_at ASC`,
+    [quizId]
+  );
+  return result.rows.map((row) => ({
+    ...mapQuestionRow(row),
+    position: Number(row.position || 0),
+    pointsOverride: row.points_override !== null && row.points_override !== undefined
+      ? Number(row.points_override)
+      : null,
+    effectivePoints: row.points_override !== null && row.points_override !== undefined
+      ? Number(row.points_override)
+      : Number(row.points || 1),
+  }));
+}
+
+async function recomputeTotalPoints(quizId, client) {
+  const r = await client.query(
+    `SELECT COALESCE(SUM(COALESCE(qq.points_override, q.points)), 0)::INT AS total
+     FROM quiz_questions qq
+     JOIN questions q ON q.id = qq.question_id
+     WHERE qq.quiz_id = $1`,
+    [quizId]
+  );
+  const total = r.rows[0]?.total || 0;
+  await client.query(`UPDATE quizzes SET total_points = $1 WHERE id = $2`, [total, quizId]);
+  return total;
+}
+
+/**
+ * Resolve the question item array from payload into question_ids + positions.
+ * Each item is either:
+ *   { mode: 'import', questionId, pointsOverride? }
+ *   { mode: 'create', ...question payload..., pointsOverride? }
+ */
+async function resolveQuestionItems(items, actorId, client) {
+  if (!Array.isArray(items)) return [];
+  const resolved = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i] || {};
+    const mode = item.mode || (item.questionId ? 'import' : 'create');
+    let questionId;
+    if (mode === 'import') {
+      questionId = parseId(item.questionId, `questions[${i}].questionId`);
+      const exists = await client.query(
+        `SELECT 1 FROM questions WHERE id = $1 AND is_deleted = FALSE`,
+        [questionId]
+      );
+      if (!exists.rows[0]) throw new AppError(`Question ${questionId} not found`, 404);
+    } else {
+      const sanitized = sanitizeQuestionPayload(item, `Question ${i + 1}`);
+      const inserted = await insertQuestionRow(client, sanitized, actorId);
+      questionId = inserted.id;
+    }
+    const pointsOverride = item.pointsOverride !== undefined && item.pointsOverride !== null && `${item.pointsOverride}`.trim() !== ''
+      ? Math.max(0, Number(item.pointsOverride))
+      : null;
+    resolved.push({ questionId, pointsOverride });
+  }
+  // Dedupe: same question can't appear twice in one quiz (PK constraint), keep first.
+  const seen = new Set();
+  return resolved.filter((r) => {
+    if (seen.has(r.questionId)) return false;
+    seen.add(r.questionId);
+    return true;
+  });
+}
+
+export async function listQuizzes(filters = {}) {
+  const where = ['q.is_deleted = FALSE'];
+  const params = [];
+
+  if (filters.q && String(filters.q).trim()) {
+    params.push(`%${String(filters.q).trim().toLowerCase()}%`);
+    where.push(`LOWER(q.title) LIKE $${params.length}`);
+  }
+  if (filters.categoryId !== undefined && filters.categoryId !== null && `${filters.categoryId}`.trim() !== '') {
+    params.push(parseId(filters.categoryId, 'categoryId'));
+    where.push(`q.category_id = $${params.length}`);
+  }
+  if (filters.status && STATUSES.includes(String(filters.status))) {
+    params.push(String(filters.status));
+    where.push(`q.status = $${params.length}`);
+  }
+
+  const page = Math.max(1, parseInt(filters.page, 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(filters.pageSize, 10) || 20));
+  const offset = (page - 1) * pageSize;
+  const orderBy = buildSort(filters.sort);
+
+  const countResult = await pool.query(
+    `SELECT COUNT(*)::INT AS total
+     FROM quizzes q
+     WHERE ${where.join(' AND ')}`,
+    params
+  );
+  const total = countResult.rows[0]?.total || 0;
+
+  const dataParams = [...params, pageSize, offset];
+  const dataResult = await pool.query(
+    `SELECT q.*,
+            c.name AS category_name,
+            (SELECT COUNT(*)::INT FROM quiz_questions qq WHERE qq.quiz_id = q.id) AS question_count
+     FROM quizzes q
+     LEFT JOIN quiz_categories c ON c.id = q.category_id AND c.is_deleted = FALSE
+     WHERE ${where.join(' AND ')}
+     ORDER BY ${orderBy}
+     LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
+    dataParams
+  );
+
+  return {
+    data: dataResult.rows.map((row) => mapQuizRow(row, [], Number(row.question_count || 0))),
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    },
+  };
+}
+
+export async function getQuiz(id) {
+  const parsed = parseId(id, 'quizId');
+  const result = await pool.query(
+    `SELECT q.*, c.name AS category_name
+     FROM quizzes q
+     LEFT JOIN quiz_categories c ON c.id = q.category_id AND c.is_deleted = FALSE
+     WHERE q.id = $1 AND q.is_deleted = FALSE`,
+    [parsed]
+  );
+  const row = result.rows[0];
+  if (!row) throw new AppError('Quiz not found', 404);
+  const questions = await loadQuizQuestions(parsed);
+  return mapQuizRow(row, questions, questions.length);
 }
 
 export async function createQuiz(payload, actor) {
   const actorId = parseId(actor?.id, 'actorId');
-  const subtopicId = payload?.subtopicId !== undefined && payload?.subtopicId !== null
-    ? parseId(payload.subtopicId, 'subtopicId')
-    : null;
-
-  let courseId = payload?.courseId ?? payload?.course;
-  if (courseId !== undefined && courseId !== null) {
-    courseId = parseId(courseId, 'courseId');
-  }
-
-  let subtopicInfo = null;
-  if (subtopicId) {
-    subtopicInfo = await getCourseIdFromSubtopic(subtopicId);
-    if (!subtopicInfo) throw new AppError('Subtopic not found', 404);
-    if (!courseId) courseId = Number(subtopicInfo.course_id);
-    if (Number(courseId) !== Number(subtopicInfo.course_id)) {
-      throw new AppError('subtopicId does not belong to provided courseId', 400);
-    }
-  }
-
-  if (!courseId) throw new AppError('courseId is required', 400);
-  await validateCourseExists(courseId);
-
   const title = String(payload?.title || '').trim();
   if (!title) throw new AppError('Quiz title is required', 400);
+  if (title.length > 255) throw new AppError('Quiz title must be 255 chars or less', 400);
 
-  const triggerTimestampSeconds =
-    payload?.triggerTimestampSeconds !== undefined
-      ? Math.max(0, Number(payload.triggerTimestampSeconds || 0))
-      : Math.max(0, Number(subtopicInfo?.timestamp_end || 0));
-
-  const questions = sanitizeQuestions(payload?.questions);
   const description = String(payload?.description || '').trim();
-  const status = String(payload?.status || 'active').trim().toLowerCase();
-  const normalizedStatus = status === 'inactive' ? 'inactive' : 'active';
+  const status = 'archived';
 
-  const inserted = await pool.query(
-    `INSERT INTO quizzes (
-      course_id,
-      subtopic_id,
-      title,
-      description,
-      trigger_timestamp_seconds,
-      questions,
-      status,
-      created_by,
-      updated_by
-    ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)
-    RETURNING *`,
-    [
-      courseId,
-      subtopicId,
-      title,
-      description,
-      triggerTimestampSeconds,
-      JSON.stringify(questions),
-      normalizedStatus,
-      actorId,
-      actorId,
-    ]
-  );
+  const categoryId = payload?.categoryId !== undefined && payload?.categoryId !== null && `${payload.categoryId}`.trim() !== ''
+    ? parseId(payload.categoryId, 'categoryId')
+    : null;
 
-  const row = inserted.rows[0];
+  const items = Array.isArray(payload?.questions) ? payload.questions : [];
 
-  if (subtopicId) {
-    await pool.query(
-      `UPDATE subtopics
-       SET quiz_id = $1
-       WHERE id = $2`,
-      [String(row.id), subtopicId]
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await validateCategoryExists(categoryId, client);
+
+    const inserted = await client.query(
+      `INSERT INTO quizzes (title, description, category_id, status, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$5)
+       RETURNING *`,
+      [title, description, categoryId, status, actorId]
     );
+    const quizRow = inserted.rows[0];
+
+    const resolved = await resolveQuestionItems(items, actorId, client);
+    for (let i = 0; i < resolved.length; i++) {
+      await client.query(
+        `INSERT INTO quiz_questions (quiz_id, question_id, position, points_override)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (quiz_id, question_id) DO NOTHING`,
+        [quizRow.id, resolved[i].questionId, i, resolved[i].pointsOverride]
+      );
+    }
+    await recomputeTotalPoints(quizRow.id, client);
+    await client.query('COMMIT');
+    return getQuiz(quizRow.id);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-
-  return mapQuizRow(row, false);
 }
 
-export async function listQuizzes(filters = {}, includeAnswers = false) {
-  const conditions = ['q.is_deleted = FALSE'];
-  const params = [];
-
-  if (filters.courseId !== undefined && filters.courseId !== null && `${filters.courseId}`.trim() !== '') {
-    params.push(parseId(filters.courseId, 'courseId'));
-    conditions.push(`q.course_id = $${params.length}`);
-  }
-  if (filters.subtopicId !== undefined && filters.subtopicId !== null && `${filters.subtopicId}`.trim() !== '') {
-    params.push(parseId(filters.subtopicId, 'subtopicId'));
-    conditions.push(`q.subtopic_id = $${params.length}`);
-  }
-  if (filters.status && ['active', 'inactive'].includes(String(filters.status).toLowerCase())) {
-    params.push(String(filters.status).toLowerCase());
-    conditions.push(`q.status = $${params.length}`);
-  }
-
-  const result = await pool.query(
-    `SELECT q.*
-     FROM quizzes q
-     WHERE ${conditions.join(' AND ')}
-     ORDER BY q.trigger_timestamp_seconds ASC, q.created_at ASC`,
-    params
-  );
-  return result.rows.map((row) => mapQuizRow(row, includeAnswers));
-}
-
-export async function getQuizById(quizId, includeAnswers = false) {
-  const parsedQuizId = parseId(quizId, 'quizId');
-  const result = await pool.query(
-    `SELECT *
-     FROM quizzes
-     WHERE id = $1
-       AND is_deleted = FALSE`,
-    [parsedQuizId]
-  );
-  const row = result.rows[0];
-  if (!row) throw new AppError('Quiz not found', 404);
-  return mapQuizRow(row, includeAnswers);
-}
-
-export async function listQuizzesByCourse(courseId, includeAnswers = false) {
-  const parsedCourseId = parseId(courseId, 'courseId');
-  const result = await pool.query(
-    `SELECT *
-     FROM quizzes
-     WHERE course_id = $1
-       AND is_deleted = FALSE
-       AND status IN ('active', 'inactive')
-     ORDER BY trigger_timestamp_seconds ASC, created_at ASC`,
-    [parsedCourseId]
-  );
-  return result.rows.map((row) => mapQuizRow(row, includeAnswers));
-}
-
-export async function getQuizByCourseAndTimestamp(courseId, triggerTimestampSeconds, includeAnswers = false) {
-  const parsedCourseId = parseId(courseId, 'courseId');
-  const timestamp = Math.max(0, Number(triggerTimestampSeconds || 0));
-
-  const result = await pool.query(
-    `SELECT *
-     FROM quizzes
-     WHERE course_id = $1
-       AND trigger_timestamp_seconds = $2
-       AND status = 'active'
-       AND is_deleted = FALSE
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [parsedCourseId, timestamp]
-  );
-
-  const row = result.rows[0];
-  if (!row) throw new AppError('Quiz not found for this timestamp', 404);
-  return mapQuizRow(row, includeAnswers);
-}
-
-export async function updateQuiz(quizId, payload, actor) {
-  const parsedQuizId = parseId(quizId, 'quizId');
+export async function updateQuiz(id, payload, actor) {
+  const parsed = parseId(id, 'quizId');
   const actorId = parseId(actor?.id, 'actorId');
 
-  const existingResult = await pool.query(
-    `SELECT *
-     FROM quizzes
-     WHERE id = $1
-       AND is_deleted = FALSE`,
-    [parsedQuizId]
+  const existing = await pool.query(
+    `SELECT * FROM quizzes WHERE id = $1 AND is_deleted = FALSE`,
+    [parsed]
   );
-  const existing = existingResult.rows[0];
-  if (!existing) throw new AppError('Quiz not found', 404);
+  const row = existing.rows[0];
+  if (!row) throw new AppError('Quiz not found', 404);
 
-  const title = payload?.title !== undefined ? String(payload.title || '').trim() : existing.title;
+  const title = payload?.title !== undefined ? String(payload.title || '').trim() : row.title;
   if (!title) throw new AppError('Quiz title is required', 400);
 
-  const description =
-    payload?.description !== undefined ? String(payload.description || '').trim() : (existing.description || '');
+  const description = payload?.description !== undefined ? String(payload.description || '').trim() : row.description;
+  const status = row.status;
+  const categoryId = payload?.categoryId !== undefined
+    ? (payload.categoryId === null || `${payload.categoryId}`.trim() === ''
+        ? null
+        : parseId(payload.categoryId, 'categoryId'))
+    : row.category_id;
 
-  const triggerTimestampSeconds =
-    payload?.triggerTimestampSeconds !== undefined
-      ? Math.max(0, Number(payload.triggerTimestampSeconds || 0))
-      : Number(existing.trigger_timestamp_seconds || 0);
+  const rewireQuestions = Array.isArray(payload?.questions);
 
-  const status =
-    payload?.status !== undefined && String(payload.status).toLowerCase() === 'inactive'
-      ? 'inactive'
-      : payload?.status !== undefined
-        ? 'active'
-        : existing.status;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await validateCategoryExists(categoryId, client);
 
-  const questions =
-    payload?.questions !== undefined
-      ? sanitizeQuestions(payload.questions)
-      : (Array.isArray(existing.questions) ? existing.questions : []);
+    await client.query(
+      `UPDATE quizzes
+       SET title = $1, description = $2, category_id = $3, status = $4, updated_by = $5
+       WHERE id = $6`,
+      [title, description, categoryId, status, actorId, parsed]
+    );
 
-  const updated = await pool.query(
-    `UPDATE quizzes
-     SET title = $1,
-         description = $2,
-         trigger_timestamp_seconds = $3,
-         questions = $4::jsonb,
-         status = $5,
-         updated_by = $6
-     WHERE id = $7
-     RETURNING *`,
-    [
-      title,
-      description,
-      triggerTimestampSeconds,
-      JSON.stringify(questions),
-      status,
-      actorId,
-      parsedQuizId,
-    ]
-  );
+    if (rewireQuestions) {
+      await client.query(`DELETE FROM quiz_questions WHERE quiz_id = $1`, [parsed]);
+      const resolved = await resolveQuestionItems(payload.questions, actorId, client);
+      for (let i = 0; i < resolved.length; i++) {
+        await client.query(
+          `INSERT INTO quiz_questions (quiz_id, question_id, position, points_override)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (quiz_id, question_id) DO NOTHING`,
+          [parsed, resolved[i].questionId, i, resolved[i].pointsOverride]
+        );
+      }
+      await recomputeTotalPoints(parsed, client);
+    }
 
-  return mapQuizRow(updated.rows[0], false);
+    await client.query('COMMIT');
+    return getQuiz(parsed);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
-export async function deleteQuiz(quizId) {
-  const parsedQuizId = parseId(quizId, 'quizId');
-
-  const existingResult = await pool.query(
-    `SELECT *
-     FROM quizzes
-     WHERE id = $1
-       AND is_deleted = FALSE`,
-    [parsedQuizId]
+export async function setQuizLifecycleStatus(id, nextStatus, actor) {
+  const parsed = parseId(id, 'quizId');
+  const actorId = parseId(actor?.id, 'actorId');
+  if (nextStatus !== 'published' && nextStatus !== 'archived') {
+    throw new AppError('Invalid lifecycle action', 400);
+  }
+  const existing = await pool.query(
+    `SELECT * FROM quizzes WHERE id = $1 AND is_deleted = FALSE`,
+    [parsed]
   );
-  const existing = existingResult.rows[0];
-  if (!existing) throw new AppError('Quiz not found', 404);
+  if (!existing.rows[0]) throw new AppError('Quiz not found', 404);
+  await pool.query(
+    `UPDATE quizzes SET status = $1, updated_by = $2, updated_at = NOW() WHERE id = $3`,
+    [nextStatus, actorId, parsed]
+  );
+  return getQuiz(parsed);
+}
+
+export async function deleteQuiz(id) {
+  const parsed = parseId(id, 'quizId');
+  const existing = await pool.query(
+    `SELECT * FROM quizzes WHERE id = $1 AND is_deleted = FALSE`,
+    [parsed]
+  );
+  if (!existing.rows[0]) throw new AppError('Quiz not found', 404);
 
   await pool.query(
-    `UPDATE quizzes
-     SET is_deleted = TRUE,
-         deleted_at = NOW()
-     WHERE id = $1`,
-    [parsedQuizId]
+    `UPDATE quizzes SET is_deleted = TRUE, deleted_at = NOW() WHERE id = $1`,
+    [parsed]
+  );
+  // Junction rows remain in case of restore; cascade only fires on hard delete.
+  return { success: true };
+}
+
+export async function duplicateQuiz(id, payload, actor) {
+  const parsed = parseId(id, 'quizId');
+  const actorId = parseId(actor?.id, 'actorId');
+
+  const src = await pool.query(
+    `SELECT * FROM quizzes WHERE id = $1 AND is_deleted = FALSE`,
+    [parsed]
+  );
+  if (!src.rows[0]) throw new AppError('Source quiz not found', 404);
+
+  const links = await pool.query(
+    `SELECT question_id, position, points_override
+     FROM quiz_questions
+     WHERE quiz_id = $1
+     ORDER BY position ASC`,
+    [parsed]
   );
 
-  await pool.query(
-    `UPDATE subtopics
-     SET quiz_id = NULL
-     WHERE quiz_id = $1`,
-    [String(parsedQuizId)]
-  );
+  const title = String(payload?.title || `${src.rows[0].title} (Copy)`).trim();
 
-  return { success: true, message: 'Quiz deleted successfully' };
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const inserted = await client.query(
+      `INSERT INTO quizzes (title, description, category_id, status, created_by, updated_by)
+       VALUES ($1,$2,$3,'archived',$4,$4)
+       RETURNING *`,
+      [title, src.rows[0].description, src.rows[0].category_id, actorId]
+    );
+    const newId = inserted.rows[0].id;
+    for (const link of links.rows) {
+      await client.query(
+        `INSERT INTO quiz_questions (quiz_id, question_id, position, points_override)
+         VALUES ($1,$2,$3,$4)`,
+        [newId, link.question_id, link.position, link.points_override]
+      );
+    }
+    await recomputeTotalPoints(newId, client);
+    await client.query('COMMIT');
+    return getQuiz(newId);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

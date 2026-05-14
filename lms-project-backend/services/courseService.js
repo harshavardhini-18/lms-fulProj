@@ -24,6 +24,21 @@ function parseId(value, label) {
   return parsed;
 }
 
+/** Optional FK to reusable quiz bank (bigint). Empty / null clears link. */
+async function normalizeLessonQuizFk(quizValue) {
+  if (quizValue === undefined || quizValue === null) return null;
+  const s = String(quizValue).trim();
+  if (!s) return null;
+  const id = Number.parseInt(s, 10);
+  if (!Number.isInteger(id) || id <= 0) throw new AppError('Invalid quiz id', 400);
+  const chk = await pool.query(
+    `SELECT 1 FROM quizzes WHERE id = $1 AND is_deleted = FALSE`,
+    [id]
+  );
+  if (chk.rowCount === 0) throw new AppError('Quiz not found', 404);
+  return id;
+}
+
 function toBool(value, defaultValue = false) {
   if (value === undefined || value === null) return defaultValue;
   return Boolean(value);
@@ -305,7 +320,7 @@ function mapLessonRow(row, videoRow) {
     timestampNotesEnabled: Boolean(row.timestamp_notes_enabled),
     isFreePreview: Boolean(row.is_free_preview),
     lockedUntilPreviousCompleted: Boolean(row.locked_until_previous_completed),
-    quizId: row.quiz_id || '',
+    quizId: row.quiz_id != null && row.quiz_id !== '' ? String(row.quiz_id) : '',
     resources: Array.isArray(row.resources) ? row.resources : [],
     assignmentDetails: row.assignment_details || {},
     videoUrl: resolvedVideoUrl,
@@ -936,7 +951,7 @@ export async function createLesson(courseId, moduleId, lessonData, actor) {
       toBool(lessonData.timestampNotesEnabled, false),
       toBool(lessonData.isFreePreview, false),
       toBool(lessonData.lockedUntilPreviousCompleted, false),
-      String(lessonData.quizId || '').trim() || null,
+      await normalizeLessonQuizFk(lessonData.quizId),
       JSON.stringify(sanitizeResources(lessonData.resources)),
       JSON.stringify(sanitizeAssignmentDetails(lessonData.assignmentDetails)),
       Number.isFinite(position) && position >= 0 ? position : 0,
@@ -1036,7 +1051,9 @@ export async function updateLesson(courseId, moduleId, lessonId, updates, actor)
       updates.lockedUntilPreviousCompleted !== undefined
         ? toBool(updates.lockedUntilPreviousCompleted, false)
         : lessonRow.locked_until_previous_completed,
-      updates.quizId !== undefined ? String(updates.quizId || '').trim() || null : lessonRow.quiz_id,
+      updates.quizId !== undefined
+        ? await normalizeLessonQuizFk(updates.quizId)
+        : lessonRow.quiz_id,
       updates.resources !== undefined
         ? JSON.stringify(sanitizeResources(updates.resources))
         : JSON.stringify(Array.isArray(lessonRow.resources) ? lessonRow.resources : []),

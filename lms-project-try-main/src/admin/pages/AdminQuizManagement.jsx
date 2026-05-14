@@ -1,783 +1,79 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { adminCourseService } from '../services/adminCourseService';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { adminQuizService } from '../services/adminQuizService';
+import { adminQuestionService } from '../services/adminQuestionService';
+import { adminQuizCategoryService } from '../services/adminQuizCategoryService';
 import Toast from '../components/common/Toast';
+import Pagination from '../components/quiz/Pagination';
+import QuestionEditorModal from '../components/quiz/QuestionEditorModal';
+import CategoryEditorModal from '../components/quiz/CategoryEditorModal';
+import ConfirmDialog from '../components/quiz/ConfirmDialog';
+import QuizPreviewModal from '../components/quiz/QuizPreviewModal';
+import QuizAnswerKeyModal from '../components/quiz/QuizAnswerKeyModal';
 import './AdminQuizManagement.css';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+const TAB_QUIZZES = 'quizzes';
+const TAB_QUESTIONS = 'questions';
+const TAB_CATEGORIES = 'categories';
 
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
+const TYPE_LABELS = {
+  mcq: 'MCQ',
+  multi_choice: 'Multi-choice',
+  true_false: 'True / False',
+  fill_blank: 'Fill-in',
+  code_image: 'Code image',
+};
+
+function normalizeQuizStatus(status) {
+  if (status === 'active') return 'published';
+  if (status === 'draft' || status === 'published' || status === 'archived') return status;
+  return 'draft';
 }
 
-function emptyMcqChoice() {
-  return { id: uid(), label: '', isCorrect: false };
+function quizStatusLabel(status) {
+  const s = normalizeQuizStatus(status);
+  if (s === 'published') return 'Published';
+  if (s === 'archived') return 'Archived';
+  return 'Draft';
 }
 
-function emptyQuestion(type = 'mcq') {
-  const base = { id: uid(), type, question: '' };
-  if (type === 'mcq') return { ...base, choices: [emptyMcqChoice(), emptyMcqChoice()] };
-  if (type === 'fill_blank') return { ...base, acceptedAnswers: [''] };
-  if (type === 'code_image') return { ...base, codeImageUrl: '', choices: [emptyMcqChoice(), emptyMcqChoice()] };
-  return base;
+function quizStatusBadgeClass(status) {
+  const s = normalizeQuizStatus(status);
+  if (s === 'published') return 'aqm-badge--status-published';
+  if (s === 'archived') return 'aqm-badge--status-archived';
+  return 'aqm-badge--status-draft';
 }
 
-const CHOICE_LETTERS = ['A', 'B', 'C', 'D', 'E'];
-
-function emptyQuiz(courseId, subtopicId) {
-  return {
-    title: '',
-    description: '',
-    triggerTimestampSeconds: 0,
-    courseId,
-    subtopicId,
-    status: 'active',
-    questions: [emptyQuestion('mcq')],
-  };
-}
-
-const TYPE_LABELS = { mcq: 'Multiple Choice', fill_blank: 'Fill in the Blank', code_image: 'Code Snippet' };
-
-// ─── QuestionCard ────────────────────────────────────────────────────────────
-
-function QuestionCard({ question, index, onChange, onDelete, total, isActive, onActivate }) {
-  const fileRef = useRef();
-
-  function updateField(key, value) {
-    onChange({ ...question, [key]: value });
-  }
-
-  function updateChoice(cIndex, key, value) {
-    const choices = question.choices.map((c, i) =>
-      i === cIndex ? { ...c, [key]: value } : key === 'isCorrect' && value ? { ...c, isCorrect: false } : c
-    );
-    onChange({ ...question, choices });
-  }
-
-  function addChoice() {
-    if ((question.choices?.length ?? 0) >= 5) return;
-    onChange({ ...question, choices: [...(question.choices || []), emptyMcqChoice()] });
-  }
-
-  function removeChoice(cIndex) {
-    if ((question.choices?.length ?? 0) <= 2) return;
-    onChange({ ...question, choices: question.choices.filter((_, i) => i !== cIndex) });
-  }
-
-  function updateAnswer(aIndex, value) {
-    const arr = [...(question.acceptedAnswers || [''])];
-    arr[aIndex] = value;
-    onChange({ ...question, acceptedAnswers: arr });
-  }
-
-  function addAnswer() {
-    onChange({ ...question, acceptedAnswers: [...(question.acceptedAnswers || ['']), ''] });
-  }
-
-  function removeAnswer(aIndex) {
-    if ((question.acceptedAnswers?.length ?? 1) <= 1) return;
-    onChange({ ...question, acceptedAnswers: question.acceptedAnswers.filter((_, i) => i !== aIndex) });
-  }
-
-  function handleCodeImage(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be under 5MB');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (ev) => updateField('codeImageUrl', ev.target.result);
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  }
-
-  const choiceList = (namePrefix, showRemove) => (
-    <div className="aqm-choices">
-      <p className="aqm-choices-label">
-        Answer choices
-        <span className="aqm-hint"> — select the correct one</span>
-      </p>
-      {(question.choices || []).map((choice, cIdx) => (
-        <div
-          key={choice.id}
-          className={`aqm-choice-row ${choice.isCorrect ? 'is-correct' : ''}`}
-          onClick={() => updateChoice(cIdx, 'isCorrect', true)}
-        >
-          <span className="aqm-choice-letter">{CHOICE_LETTERS[cIdx] ?? cIdx + 1}</span>
-          <input
-            type="radio"
-            name={`${namePrefix}-${question.id}`}
-            checked={choice.isCorrect}
-            onChange={() => updateChoice(cIdx, 'isCorrect', true)}
-            className="aqm-radio-hidden"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <input
-            type="text"
-            className="aqm-choice-input"
-            placeholder={`Option ${CHOICE_LETTERS[cIdx] ?? cIdx + 1}`}
-            value={choice.label}
-            onChange={(e) => updateChoice(cIdx, 'label', e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            onFocus={onActivate}
-          />
-          {showRemove && (question.choices?.length ?? 0) > 2 && (
-            <button
-              type="button"
-              className="aqm-icon-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                removeChoice(cIdx);
-              }}
-              title="Remove"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          )}
-        </div>
-      ))}
-      {(question.choices?.length ?? 0) < 5 && (
-        <button type="button" className="aqm-add-choice-btn" onClick={addChoice}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add option
-        </button>
-      )}
-    </div>
-  );
-
-  return (
-    <div
-      className={`aqm-qcard ${isActive ? 'is-active' : ''}`}
-      onClick={onActivate}
-      onFocusCapture={onActivate}
-    >
-      {/* ── toolbar ── */}
-      <div className="aqm-qcard-header">
-        <span className="aqm-qnum">Q{index + 1}</span>
-        <div className="aqm-qcard-divider" />
-        <select
-          className="aqm-type-select"
-          value={question.type}
-          onChange={(e) => onChange(emptyQuestion(e.target.value))}
-        >
-          {Object.entries(TYPE_LABELS).map(([val, label]) => (
-            <option key={val} value={val}>{label}</option>
-          ))}
-        </select>
-        <div className="aqm-qcard-spacer" />
-        {total > 1 && (
-          <button type="button" className="aqm-icon-btn aqm-icon-btn--danger" onClick={onDelete} title="Delete question">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14H6L5 6" />
-              <path d="M10 11v6M14 11v6" />
-              <path d="M9 6V4h6v2" />
-            </svg>
-          </button>
-        )}
-      </div>
-
-      {/* ── body ── */}
-      <div className="aqm-qcard-body">
-        <div className="aqm-field">
-          <label className="aqm-label">Question</label>
-          <textarea
-            className="aqm-textarea"
-            rows={2}
-            placeholder="Write your question here…"
-            value={question.question}
-            onChange={(e) => updateField('question', e.target.value)}
-            onFocus={onActivate}
-          />
-        </div>
-
-        {question.type === 'mcq' && choiceList('correct', true)}
-
-        {question.type === 'fill_blank' && (
-          <div className="aqm-answers">
-            <p className="aqm-choices-label">
-              Accepted answers
-              <span className="aqm-hint"> — case-insensitive, any one match counts</span>
-            </p>
-            {(question.acceptedAnswers || ['']).map((ans, aIdx) => (
-              <div className="aqm-answer-row" key={aIdx}>
-                <span className="aqm-answer-num">{aIdx + 1}</span>
-                <input
-                  type="text"
-                  className="aqm-input"
-                  placeholder={`Accepted answer ${aIdx + 1}`}
-                  value={ans}
-                  onChange={(e) => updateAnswer(aIdx, e.target.value)}
-                  onFocus={onActivate}
-                />
-                {(question.acceptedAnswers?.length ?? 1) > 1 && (
-                  <button type="button" className="aqm-icon-btn" onClick={() => removeAnswer(aIdx)} title="Remove">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            ))}
-            <button type="button" className="aqm-add-choice-btn" onClick={addAnswer}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add answer
-            </button>
-          </div>
-        )}
-
-        {question.type === 'code_image' && (
-          <div className="aqm-code-image-section">
-            <p className="aqm-choices-label">Code snippet image</p>
-            {question.codeImageUrl ? (
-              <div className="aqm-code-preview">
-                <img src={question.codeImageUrl} alt="Code snippet" />
-                <button
-                  type="button"
-                  className="aqm-code-delete"
-                  onClick={() => updateField('codeImageUrl', '')}
-                  title="Remove image"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <button type="button" className="aqm-code-dropzone" onClick={() => fileRef.current?.click()}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                <span>Upload code snippet image</span>
-                <small>PNG or JPG · Max 5MB</small>
-              </button>
-            )}
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCodeImage} />
-            {choiceList('correct-ci', true)}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── QuizEditor ──────────────────────────────────────────────────────────────
-
-function QuizEditor({ courseId, subtopic, existingQuiz, onSaved, onDeleted }) {
-  const editorRef = useRef(null);
-  function buildInitialQuiz() {
-    return existingQuiz
-      ? {
-          title: existingQuiz.title || '',
-          description: existingQuiz.description || '',
-          triggerTimestampSeconds: existingQuiz.triggerTimestampSeconds ?? 0,
-          status: existingQuiz.status || 'active',
-          courseId,
-          subtopicId: subtopic._id,
-          questions: existingQuiz.questions?.length
-            ? existingQuiz.questions
-            : [emptyQuestion('mcq')],
-        }
-      : emptyQuiz(courseId, subtopic._id);
-  }
-
-  const [quiz, setQuiz] = useState(() =>
-    buildInitialQuiz()
-  );
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState('');
-  const [activeQuestionId, setActiveQuestionId] = useState(() => buildInitialQuiz().questions[0]?.id || null);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [previewQuestionIndex, setPreviewQuestionIndex] = useState(0);
-  const [previewSelections, setPreviewSelections] = useState({});
-  const [previewSubmitted, setPreviewSubmitted] = useState(false);
-
+function useDebounced(value, delay = 300) {
+  const [v, setV] = useState(value);
   useEffect(() => {
-    setQuiz(buildInitialQuiz());
-    setError('');
-    setActiveQuestionId(buildInitialQuiz().questions[0]?.id || null);
-    setIsPreviewMode(false);
-  }, [existingQuiz, subtopic._id, courseId]);
-
-  useEffect(() => {
-    if (!isPreviewMode) return;
-    // Keep preview opening at the top so layout is stable.
-    editorRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
-    window.scrollTo({ top: 0, behavior: 'auto' });
-  }, [isPreviewMode]);
-
-  useEffect(() => {
-    if (!quiz.questions.length) {
-      setActiveQuestionId(null);
-      return;
-    }
-    if (!quiz.questions.some((q) => q.id === activeQuestionId)) {
-      setActiveQuestionId(quiz.questions[0].id);
-    }
-  }, [quiz.questions, activeQuestionId]);
-
-  function updateQuestion(index, updated) {
-    const questions = quiz.questions.map((q, i) => (i === index ? updated : q));
-    setQuiz((prev) => ({ ...prev, questions }));
-  }
-
-  function addQuestion(type = 'mcq') {
-    setQuiz((prev) => ({ ...prev, questions: [...prev.questions, emptyQuestion(type)] }));
-  }
-
-  function deleteQuestion(index) {
-    setQuiz((prev) => ({ ...prev, questions: prev.questions.filter((_, i) => i !== index) }));
-  }
-
-  function validateQuiz() {
-    if (!quiz.title.trim()) return 'Quiz title is required.';
-    if (!quiz.questions.length) return 'Add at least one question.';
-    for (let i = 0; i < quiz.questions.length; i++) {
-      const q = quiz.questions[i];
-      if (!q.question.trim()) return `Question ${i + 1}: question text is required.`;
-      if (q.type === 'mcq' || q.type === 'code_image') {
-        if (!q.choices || q.choices.length < 2) return `Question ${i + 1}: at least 2 choices required.`;
-        if (!q.choices.some((c) => c.isCorrect)) return `Question ${i + 1}: mark one correct choice.`;
-        if (q.choices.some((c) => !c.label.trim())) return `Question ${i + 1}: all choices must have text.`;
-        if (q.type === 'code_image' && !q.codeImageUrl) return `Question ${i + 1}: upload a code snippet image.`;
-      }
-      if (q.type === 'fill_blank') {
-        const valid = (q.acceptedAnswers || []).filter((a) => a.trim());
-        if (!valid.length) return `Question ${i + 1}: at least one accepted answer required.`;
-      }
-    }
-    return null;
-  }
-
-  async function handleSave() {
-    const err = validateQuiz();
-    if (err) { setError(err); return; }
-    setError('');
-    setSaving(true);
-    try {
-      const payload = {
-        ...quiz,
-        questions: quiz.questions.map((q) => ({
-          ...q,
-          id: q.id || uid(),
-          acceptedAnswers: q.type === 'fill_blank'
-            ? (q.acceptedAnswers || []).filter((a) => a.trim())
-            : undefined,
-        })),
-      };
-      let saved;
-      if (existingQuiz) {
-        saved = await adminQuizService.update(existingQuiz.id || existingQuiz._id, payload);
-      } else {
-        saved = await adminQuizService.create(payload);
-      }
-      onSaved(saved);
-    } catch (e) {
-      setError(e.message || 'Failed to save quiz');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete() {
-    if (!existingQuiz) return;
-    if (!confirm('Delete this quiz? This cannot be undone.')) return;
-    setDeleting(true);
-    try {
-      await adminQuizService.remove(existingQuiz.id || existingQuiz._id);
-      onDeleted();
-    } catch (e) {
-      setError(e.message || 'Failed to delete quiz');
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  function handleReset() {
-    setQuiz(buildInitialQuiz());
-    setError('');
-  }
-
-  function handleTogglePreview() {
-    setIsPreviewMode((prev) => {
-      const next = !prev;
-      if (next) {
-        setPreviewQuestionIndex(0);
-        setPreviewSelections({});
-        setPreviewSubmitted(false);
-      }
-      return next;
-    });
-  }
-
-  const previewQuestions = quiz.questions || [];
-  const previewTotal = previewQuestions.length;
-  const currentPreviewQuestion = previewQuestions[previewQuestionIndex] || null;
-
-  function selectPreviewOption(questionId, value) {
-    setPreviewSelections((prev) => ({ ...prev, [questionId]: value }));
-  }
-
-  function getPreviewScore() {
-    let score = 0;
-    for (const q of previewQuestions) {
-      const key = q.id;
-      const selected = previewSelections[key];
-      if (q.type === 'fill_blank') {
-        const normalized = String(selected || '').trim().toLowerCase();
-        const accepted = (q.acceptedAnswers || []).map((a) => String(a || '').trim().toLowerCase());
-        if (normalized && accepted.includes(normalized)) score += Number(q.marks || 1);
-      } else {
-        const correctChoice = (q.choices || []).find((c) => c.isCorrect);
-        if (correctChoice && selected === correctChoice.id) score += Number(q.marks || 1);
-      }
-    }
-    return score;
-  }
-
-  const previewMaxScore = previewQuestions.reduce((acc, q) => acc + Number(q.marks || 1), 0);
-
-  return (
-    <div className="aqm-editor-wrap" ref={editorRef}>
-      {isPreviewMode && (
-        <div className="aqm-preview-toolbar">
-          <button
-            type="button"
-            className="aqm-preview-btn is-active"
-            onClick={handleTogglePreview}
-          >
-            Back to Edit
-          </button>
-        </div>
-      )}
-
-      <div className="aqm-editor">
-        {!isPreviewMode && (
-          <div className="aqm-editor-head">
-            <div className="aqm-editor-head-main">
-              <h3 className="aqm-editor-title">
-                {existingQuiz ? 'Edit Quiz' : 'Create Quiz'}
-                <span className="aqm-topic-chip">{subtopic.title}</span>
-              </h3>
-              <p className="aqm-editor-sub">One quiz per topic · quiz is mandatory to proceed to next topic</p>
-            </div>
-            <button
-              type="button"
-              className="aqm-preview-btn"
-              onClick={handleTogglePreview}
-            >
-              Preview
-            </button>
-          </div>
-        )}
-
-      {isPreviewMode ? (
-        <div className="aqm-preview-wrap">
-          {previewTotal === 0 ? (
-            <div className="aqm-preview-empty">No questions to preview yet.</div>
-          ) : (
-            <div className="aqm-preview-exam">
-              <div className="aqm-preview-progress-head">
-                <span>Question {previewQuestionIndex + 1} of {previewTotal}</span>
-                <span>{Math.round(((previewQuestionIndex + 1) / previewTotal) * 100)}%</span>
-              </div>
-              <div className="aqm-preview-progress-track">
-                <div
-                  className="aqm-preview-progress-fill"
-                  style={{ width: `${((previewQuestionIndex + 1) / previewTotal) * 100}%` }}
-                />
-              </div>
-
-              {currentPreviewQuestion ? (
-                <article className="aqm-preview-question-block">
-                  <h4 className="aqm-preview-q-title">Q{previewQuestionIndex + 1}</h4>
-                  <p className="aqm-preview-question">
-                    {currentPreviewQuestion.question || 'No question text'}
-                  </p>
-
-                  {currentPreviewQuestion.type === 'code_image' && currentPreviewQuestion.codeImageUrl ? (
-                    <img className="aqm-preview-code" src={currentPreviewQuestion.codeImageUrl} alt="Code snippet preview" />
-                  ) : null}
-
-                  {(currentPreviewQuestion.type === 'mcq' || currentPreviewQuestion.type === 'code_image') && (
-                    <div className="aqm-preview-options">
-                      {(currentPreviewQuestion.choices || []).map((choice, idx) => {
-                        const selected = previewSelections[currentPreviewQuestion.id] === choice.id;
-                        return (
-                          <button
-                            key={choice.id}
-                            type="button"
-                            className={`aqm-preview-option ${selected ? 'is-selected' : ''}`}
-                            onClick={() => selectPreviewOption(currentPreviewQuestion.id, choice.id)}
-                          >
-                            <span className={`aqm-preview-radio ${selected ? 'is-selected' : ''}`} />
-                            <span className="aqm-preview-option-label">
-                              {String.fromCharCode(65 + idx)}. {choice.label || '—'}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {currentPreviewQuestion.type === 'fill_blank' && (
-                    <div className="aqm-preview-fill">
-                      <input
-                        type="text"
-                        className="aqm-input"
-                        placeholder="Type your answer..."
-                        value={previewSelections[currentPreviewQuestion.id] || ''}
-                        onChange={(e) => selectPreviewOption(currentPreviewQuestion.id, e.target.value)}
-                      />
-                    </div>
-                  )}
-                </article>
-              ) : null}
-
-              <div className="aqm-preview-actions">
-                <button
-                  type="button"
-                  className="aqm-btn aqm-btn--ghost"
-                  onClick={() => setPreviewQuestionIndex((prev) => Math.max(0, prev - 1))}
-                  disabled={previewQuestionIndex === 0}
-                >
-                  Previous
-                </button>
-                {previewQuestionIndex < previewTotal - 1 ? (
-                  <button
-                    type="button"
-                    className="aqm-btn aqm-btn--primary"
-                    onClick={() => setPreviewQuestionIndex((prev) => Math.min(previewTotal - 1, prev + 1))}
-                  >
-                    Next Question
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="aqm-btn aqm-btn--primary"
-                    onClick={() => setPreviewSubmitted(true)}
-                  >
-                    Submit Quiz
-                  </button>
-                )}
-              </div>
-
-              {previewSubmitted ? (
-                <div className="aqm-preview-score">
-                  Score: {getPreviewScore()} / {previewMaxScore}
-                </div>
-              ) : null}
-            </div>
-          )}
-          </div>
-      ) : (
-        <>
-      <div className="aqm-editor-form">
-        <h4 className="aqm-section-title">Quiz Info</h4>
-        <div className="aqm-field-row">
-          <div className="aqm-field aqm-field--grow">
-            <label className="aqm-label">Quiz title <span className="aqm-req">*</span></label>
-            <input
-              type="text"
-              className="aqm-input"
-              placeholder="e.g. End-of-topic check"
-              value={quiz.title}
-              onChange={(e) => setQuiz((p) => ({ ...p, title: e.target.value }))}
-            />
-          </div>
-          <div className="aqm-field aqm-field--status">
-            <label className="aqm-label">Quiz status</label>
-            <label className="aqm-status-toggle">
-              <span className={`aqm-status-copy ${quiz.status === 'active' ? 'is-active' : ''}`}>
-                {quiz.status === 'active' ? 'Active' : 'Inactive'}
-              </span>
-              <input
-                type="checkbox"
-                checked={quiz.status === 'active'}
-                onChange={(e) => setQuiz((p) => ({ ...p, status: e.target.checked ? 'active' : 'inactive' }))}
-              />
-              <span className={`aqm-toggle-pill ${quiz.status === 'active' ? 'on' : ''}`} />
-            </label>
-          </div>
-        </div>
-
-        <div className="aqm-field">
-          <label className="aqm-label">Description <span className="aqm-hint">(optional)</span></label>
-          <textarea
-            className="aqm-textarea"
-            rows={2}
-            placeholder="Short note about this quiz…"
-            value={quiz.description}
-            onChange={(e) => setQuiz((p) => ({ ...p, description: e.target.value }))}
-          />
-        </div>
-      </div>
-
-      <div className="aqm-questions-header">
-        <span className="aqm-questions-label">Questions ({quiz.questions.length})</span>
-        <div className="aqm-add-q-btns">
-          <button type="button" className="aqm-add-q-btn" onClick={() => addQuestion('mcq')}>+ MCQ</button>
-          <button type="button" className="aqm-add-q-btn" onClick={() => addQuestion('fill_blank')}>+ Fill in Blank</button>
-          <button type="button" className="aqm-add-q-btn" onClick={() => addQuestion('code_image')}>+ Code Snippet</button>
-        </div>
-      </div>
-
-      <div className="aqm-questions-list">
-        {quiz.questions.map((q, i) => (
-          <QuestionCard
-            key={q.id}
-            question={q}
-            index={i}
-            total={quiz.questions.length}
-            onChange={(updated) => updateQuestion(i, updated)}
-            onDelete={() => deleteQuestion(i)}
-            isActive={activeQuestionId === q.id}
-            onActivate={() => setActiveQuestionId(q.id)}
-          />
-        ))}
-      </div>
-
-      {error && <p className="aqm-error">{error}</p>}
-
-      <div className="aqm-editor-footer">
-        {existingQuiz && (
-          <button
-            type="button"
-            className="aqm-btn aqm-btn--danger"
-            onClick={handleDelete}
-            disabled={deleting || saving}
-          >
-            {deleting ? 'Deleting…' : 'Delete Quiz'}
-          </button>
-        )}
-        <div style={{ flex: 1 }} />
-        <button
-          type="button"
-          className="aqm-btn aqm-btn--ghost"
-          onClick={handleReset}
-          disabled={saving || deleting}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="aqm-btn aqm-btn--primary"
-          onClick={handleSave}
-          disabled={saving || deleting}
-        >
-          {saving ? 'Saving…' : existingQuiz ? 'Save Changes' : 'Create Quiz'}
-        </button>
-      </div>
-      </>
-      )}
-      </div>
-    </div>
-  );
+    const t = setTimeout(() => setV(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return v;
 }
-
-// ─── Main page ───────────────────────────────────────────────────────────────
 
 export default function AdminQuizManagement() {
-  const [courses, setCourses] = useState([]);
-  const [loadingCourses, setLoadingCourses] = useState(true);
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [courseDetail, setCourseDetail] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [selectedModuleId, setSelectedModuleId] = useState(null);
-  const [selectedTopic, setSelectedTopic] = useState(null);
-  const [quizzes, setQuizzes] = useState({});
-  const [loadingQuizzes, setLoadingQuizzes] = useState(false);
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState(TAB_QUIZZES);
   const [toast, setToast] = useState(null);
+  const [categories, setCategories] = useState([]);
 
   function showToast(message, type = 'success') {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   }
 
+  function loadCategories() {
+    adminQuizCategoryService
+      .list()
+      .then(setCategories)
+      .catch(() => {});
+  }
+
   useEffect(() => {
-    setLoadingCourses(true);
-    adminCourseService
-      .getAllCourses()
-      .then((res) => {
-        const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-        setCourses(list.filter((c) => c.status === 'published' || c.status === 'draft'));
-      })
-      .catch(() => showToast('Failed to load courses', 'error'))
-      .finally(() => setLoadingCourses(false));
+    loadCategories();
   }, []);
-
-  async function handleSelectCourse(course) {
-    setSelectedCourse(course);
-    setSelectedModuleId(null);
-    setSelectedTopic(null);
-    setCourseDetail(null);
-    setQuizzes({});
-    setLoadingDetail(true);
-    try {
-      const res = await adminCourseService.getCourse(course._id || course.id);
-      const detail = res?.data ?? res;
-      setCourseDetail(detail);
-    } catch {
-      showToast('Failed to load course details', 'error');
-    } finally {
-      setLoadingDetail(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!selectedCourse) return;
-    const courseId = selectedCourse._id || selectedCourse.id;
-    setLoadingQuizzes(true);
-    adminQuizService
-      .listByCourse(courseId)
-      .then((list) => {
-        const map = {};
-        (Array.isArray(list) ? list : []).forEach((q) => {
-          if (q.subtopicId) map[String(q.subtopicId)] = q;
-        });
-        setQuizzes(map);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingQuizzes(false));
-  }, [selectedCourse]);
-
-  const modules = courseDetail?.modules ?? [];
-
-  function handleTopicClick(topic) {
-    setSelectedTopic(topic);
-  }
-
-  function handleQuizSaved(saved) {
-    const key = String(saved.subtopicId);
-    setQuizzes((prev) => ({ ...prev, [key]: saved }));
-    showToast('Quiz saved successfully');
-  }
-
-  function handleQuizDeleted() {
-    if (!selectedTopic) return;
-    const key = String(selectedTopic._id || selectedTopic.id);
-    setQuizzes((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-    showToast('Quiz deleted');
-  }
-
-  const currentQuiz = selectedTopic
-    ? quizzes[String(selectedTopic._id || selectedTopic.id)] ?? null
-    : null;
 
   return (
     <div className="aqm-page">
@@ -791,156 +87,879 @@ export default function AdminQuizManagement() {
       )}
 
       <div className="aqm-header">
-        <h1 className="aqm-page-title">Quizzes</h1>
-        <p className="aqm-page-sub">Create and manage quizzes for each topic. Students must complete a quiz to proceed to the next topic.</p>
+        <div className="aqm-header-text">
+          <h1>Quizzes &amp; Question Bank</h1>
+          <p>Build a reusable bank of questions, then assemble them into quizzes. Quizzes can also import existing questions or create new ones inline.</p>
+        </div>
       </div>
 
-      <div className="aqm-layout">
-        {/* Left sidebar */}
-        <aside className="aqm-sidebar">
-          <div className="aqm-sidebar-section">
-            <p className="aqm-sidebar-label">Course</p>
-            {loadingCourses ? (
-              <p className="aqm-loading-text">Loading…</p>
-            ) : (
-              <select
-                className="aqm-course-select"
-                value={selectedCourse ? String(selectedCourse._id || selectedCourse.id) : ''}
-                onChange={(e) => {
-                  const c = courses.find((x) => String(x._id || x.id) === e.target.value);
-                  if (c) handleSelectCourse(c);
-                }}
-              >
-                <option value="">— Select a course —</option>
-                {courses.map((c) => (
-                  <option key={c._id || c.id} value={String(c._id || c.id)}>
-                    {c.title}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+      <div className="aqm-tabs">
+        <button
+          className={`aqm-tab ${activeTab === TAB_QUIZZES ? 'is-active' : ''}`}
+          onClick={() => setActiveTab(TAB_QUIZZES)}
+        >
+          Quizzes
+        </button>
+        <button
+          className={`aqm-tab ${activeTab === TAB_QUESTIONS ? 'is-active' : ''}`}
+          onClick={() => setActiveTab(TAB_QUESTIONS)}
+        >
+          Question Bank
+        </button>
+        <button
+          className={`aqm-tab ${activeTab === TAB_CATEGORIES ? 'is-active' : ''}`}
+          onClick={() => setActiveTab(TAB_CATEGORIES)}
+        >
+          Categories
+          <span className="aqm-tab-count">{categories.length}</span>
+        </button>
+      </div>
 
-          {selectedCourse && (
-            <div className="aqm-sidebar-section">
-              <p className="aqm-sidebar-label">Modules</p>
-              {loadingDetail ? (
-                <p className="aqm-loading-text">Loading…</p>
-              ) : modules.length === 0 ? (
-                <p className="aqm-empty-text">No modules yet</p>
-              ) : (
-                <div className="aqm-module-list">
-                  {modules.map((mod) => {
-                    const modId = String(mod._id || mod.id);
-                    const isExpanded = modId === selectedModuleId;
-                    const modTopics = mod.lessons ?? mod.subtopics ?? [];
-                    return (
-                      <div key={modId} className="aqm-module-group">
+      {activeTab === TAB_QUIZZES && (
+        <QuizzesTab
+          categories={categories}
+          showToast={showToast}
+          onNew={() => navigate('/admin/quizzes/new')}
+          onEdit={(qz) => navigate(`/admin/quizzes/${qz.id}/edit`)}
+        />
+      )}
+
+      {activeTab === TAB_QUESTIONS && (
+        <QuestionsTab categories={categories} showToast={showToast} />
+      )}
+
+      {activeTab === TAB_CATEGORIES && (
+        <CategoriesTab
+          categories={categories}
+          reload={loadCategories}
+          showToast={showToast}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Quizzes tab ──────────────────────────────────────────────────────── */
+function QuizzesTab({ categories, showToast, onNew, onEdit }) {
+  const location = useLocation();
+  const [data, setData] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filters, setFilters] = useState({ q: '', categoryId: '', status: '' });
+  const debouncedQ = useDebounced(filters.q, 300);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const [lifecycleBusyId, setLifecycleBusyId] = useState(null);
+  const [attemptQuiz, setAttemptQuiz] = useState(null); // step-through session (was eye preview)
+  const [answerKeyQuiz, setAnswerKeyQuiz] = useState(null); // scrollable answer key (eye)
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [openStatusMenuId, setOpenStatusMenuId] = useState(null);
+
+  useEffect(() => {
+    function onDocMouseDown(e) {
+      const el = e.target;
+      if (!(el instanceof Element)) return;
+      if (!el.closest('.aqm-status-dropdown-root')) {
+        setOpenStatusMenuId(null);
+      }
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, []);
+
+  function load(page = pagination.page) {
+    setLoading(true);
+    setError('');
+    const params = {
+      page,
+      pageSize: pagination.pageSize,
+      sort: 'updated_at:desc',
+    };
+    if (debouncedQ) params.q = debouncedQ;
+    if (filters.categoryId) params.categoryId = filters.categoryId;
+    if (filters.status) params.status = filters.status;
+
+    adminQuizService
+      .list(params)
+      .then((res) => {
+        setData(res.data);
+        setPagination(res.pagination);
+      })
+      .catch((e) => setError(e.message || 'Failed to load quizzes'))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    load(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ, filters.categoryId, filters.status]);
+
+  useEffect(() => {
+    if (location.pathname !== '/admin/quizzes') return;
+    load(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.key]);
+
+  async function handleDuplicate(qz) {
+    setBusyId(qz.id);
+    try {
+      await adminQuizService.duplicate(qz.id);
+      showToast('Quiz duplicated');
+      load(1);
+    } catch (e) {
+      showToast(e.message || 'Failed to duplicate', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handlePublishQuiz(qz) {
+    setLifecycleBusyId(qz.id);
+    setOpenStatusMenuId(null);
+    try {
+      await adminQuizService.publish(qz.id);
+      showToast('Quiz published');
+      load(pagination.page);
+    } catch (e) {
+      showToast(e.message || 'Failed to publish', 'error');
+    } finally {
+      setLifecycleBusyId(null);
+    }
+  }
+
+  async function handleArchiveQuiz(qz) {
+    setLifecycleBusyId(qz.id);
+    setOpenStatusMenuId(null);
+    try {
+      await adminQuizService.archive(qz.id);
+      showToast('Quiz archived');
+      load(pagination.page);
+    } catch (e) {
+      showToast(e.message || 'Failed to archive', 'error');
+    } finally {
+      setLifecycleBusyId(null);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!confirmTarget) return;
+    setBusyId(confirmTarget.id);
+    try {
+      await adminQuizService.remove(confirmTarget.id);
+      showToast('Quiz deleted');
+      setConfirmTarget(null);
+      load(pagination.page);
+    } catch (e) {
+      showToast(e.message || 'Failed to delete quiz', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function mapQuizPayload(full) {
+    return {
+      title: full.title,
+      questions: (full.questions || []).map((q) => ({
+        prompt: q.prompt,
+        type: q.type,
+        options: q.options || [],
+        acceptedAnswers: q.acceptedAnswers || [],
+        answerValidationMode: q.answerValidationMode || 'strict',
+        codeImageUrl: q.codeImageUrl || '',
+        effectivePoints: q.pointsOverride ?? q.points ?? 1,
+      })),
+    };
+  }
+
+  async function openAttemptQuiz(qz) {
+    setPreviewLoading(true);
+    try {
+      const full = await adminQuizService.getById(qz.id);
+      setAttemptQuiz(mapQuizPayload(full));
+    } catch (e) {
+      showToast('Failed to load quiz', 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function openAnswerKeyPreview(qz) {
+    setPreviewLoading(true);
+    try {
+      const full = await adminQuizService.getById(qz.id);
+      setAnswerKeyQuiz(mapQuizPayload(full));
+    } catch (e) {
+      showToast('Failed to load quiz preview', 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="aqm-toolbar">
+        <div className="aqm-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search quizzes…"
+            value={filters.q}
+            onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
+          />
+        </div>
+        <select
+          className="aqm-filter"
+          value={filters.categoryId}
+          onChange={(e) => setFilters((f) => ({ ...f, categoryId: e.target.value }))}
+        >
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          className="aqm-filter"
+          value={filters.status}
+          onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+        >
+          <option value="">All statuses</option>
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+
+      {error && <p className="aqm-error" style={{ marginBottom: 12 }}>{error}</p>}
+
+      <div className="aqm-table-action-bar">
+        <button className="aqm-btn aqm-btn--primary" onClick={onNew}>
+          New quiz
+        </button>
+      </div>
+
+      <div className="aqm-table-card">
+        {loading ? (
+          <div className="aqm-table-loading">Loading…</div>
+        ) : data.length === 0 ? (
+          <div className="aqm-table-empty">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            <h4>No quizzes yet</h4>
+            <p>Click <strong>New quiz</strong> to build your first one.</p>
+          </div>
+        ) : (
+          <>
+            <table className="aqm-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Category</th>
+                  <th>Questions</th>
+                  <th>Points</th>
+                  <th>Updated</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>Test</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((qz) => (
+                  <tr key={qz.id}>
+                    <td>
+                      <div className="aqm-table-title">{qz.title}</div>
+                      {qz.description && <div className="aqm-table-sub">{qz.description}</div>}
+                    </td>
+                    <td>
+                      {qz.categoryName ? (
+                        <span className="aqm-badge aqm-badge--neutral">{qz.categoryName}</span>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>—</span>
+                      )}
+                    </td>
+                    <td>{qz.questionCount}</td>
+                    <td>{qz.totalPoints}</td>
+                    <td style={{ color: '#64748b', fontSize: 12.5 }}>
+                      {new Date(qz.updatedAt).toLocaleDateString(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </td>
+                    <td className="aqm-status-dropdown-root">
+                      <div className="aqm-status-cell">
+                        <span className={`aqm-badge ${quizStatusBadgeClass(qz.status)}`}>
+                          {quizStatusLabel(qz.status)}
+                        </span>
                         <button
                           type="button"
-                          className={`aqm-module-btn ${isExpanded ? 'active' : ''}`}
-                          onClick={() => {
-                            if (isExpanded) {
-                              setSelectedModuleId(null);
-                              setSelectedTopic(null);
-                            } else {
-                              setSelectedModuleId(modId);
-                              setSelectedTopic(null);
-                            }
+                          className="aqm-status-edit-btn"
+                          aria-label="Change publication status"
+                          aria-expanded={openStatusMenuId === qz.id}
+                          aria-haspopup="listbox"
+                          disabled={lifecycleBusyId === qz.id || busyId === qz.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenStatusMenuId((id) => (id === qz.id ? null : qz.id));
                           }}
                         >
-                          <svg
-                            className={`aqm-module-chevron ${isExpanded ? 'is-open' : ''}`}
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="9 6 15 12 9 18" />
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                           </svg>
-                          <span className="aqm-module-name">{mod.title}</span>
-                          <span className="aqm-module-count">{modTopics.length}</span>
                         </button>
-
-                        {isExpanded && (
-                          <div className="aqm-topic-list">
-                            {modTopics.length === 0 ? (
-                              <p className="aqm-empty-text aqm-empty-text--nested">No topics in this module</p>
+                        {openStatusMenuId === qz.id ? (
+                          <ul className="aqm-status-menu" role="listbox">
+                            {normalizeQuizStatus(qz.status) === 'published' ? (
+                              <li role="option">
+                                <button
+                                  type="button"
+                                  className="aqm-status-menu-item"
+                                  onClick={() => handleArchiveQuiz(qz)}
+                                  disabled={lifecycleBusyId === qz.id}
+                                >
+                                  Archive
+                                </button>
+                              </li>
                             ) : (
-                              modTopics.map((topic) => {
-                                const topicId = String(topic._id || topic.id);
-                                const hasQuiz = !!quizzes[topicId];
-                                const isActive = String(selectedTopic?._id || selectedTopic?.id) === topicId;
-                                return (
-                                  <button
-                                    key={topicId}
-                                    type="button"
-                                    className={`aqm-topic-btn ${isActive ? 'active' : ''}`}
-                                    onClick={() => handleTopicClick(topic)}
-                                  >
-                                    <span className="aqm-topic-dot" />
-                                    <span className="aqm-topic-name">{topic.title}</span>
-                                    {loadingQuizzes ? null : hasQuiz ? (
-                                      <span className="aqm-quiz-badge aqm-quiz-badge--has">Quiz</span>
-                                    ) : (
-                                      <span className="aqm-quiz-badge aqm-quiz-badge--empty">No quiz</span>
-                                    )}
-                                  </button>
-                                );
-                              })
+                              <li role="option">
+                                <button
+                                  type="button"
+                                  className="aqm-status-menu-item aqm-status-menu-item--publish"
+                                  onClick={() => handlePublishQuiz(qz)}
+                                  disabled={lifecycleBusyId === qz.id}
+                                >
+                                  Publish
+                                </button>
+                              </li>
                             )}
-                          </div>
-                        )}
+                          </ul>
+                        ) : null}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </aside>
-
-        {/* Right panel */}
-        <main className="aqm-main">
-          {!selectedCourse ? (
-            <div className="aqm-empty-state">
-              <div className="aqm-empty-icon">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" strokeWidth="2.5" strokeLinecap="round" />
-                </svg>
-              </div>
-              <h3 className="aqm-empty-title">Select a course</h3>
-              <p className="aqm-empty-desc">Choose a course from the left sidebar to manage its quizzes.</p>
-            </div>
-          ) : !selectedTopic ? (
-            <div className="aqm-empty-state">
-              <div className="aqm-empty-icon">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5">
-                  <path d="M9 11l3 3L22 4" />
-                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                </svg>
-              </div>
-              <h3 className="aqm-empty-title">Select a topic</h3>
-              <p className="aqm-empty-desc">Click any topic on the left to create or edit its quiz.</p>
-            </div>
-          ) : (
-            <QuizEditor
-              key={String(selectedTopic._id || selectedTopic.id)}
-              courseId={String(selectedCourse._id || selectedCourse.id)}
-              subtopic={selectedTopic}
-              existingQuiz={currentQuiz}
-              onSaved={handleQuizSaved}
-              onDeleted={handleQuizDeleted}
-            />
-          )}
-        </main>
+                    </td>
+                    <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                      <button
+                        type="button"
+                        className="aqm-btn aqm-btn--primary aqm-btn--sm"
+                        onClick={() => openAttemptQuiz(qz)}
+                        disabled={previewLoading}
+                      >
+                        Test quiz
+                      </button>
+                    </td>
+                    <td>
+                      <div className="aqm-actions-cell">
+                        {/* 1. Preview (answer key, scrollable) */}
+                        <button
+                          className="aqm-icon-btn"
+                          onClick={() => openAnswerKeyPreview(qz)}
+                          disabled={previewLoading}
+                          title="Preview all questions and correct answers"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </button>
+                        {/* 2. Edit */}
+                        <button
+                          className="aqm-icon-btn"
+                          onClick={() => onEdit(qz)}
+                          title="Edit"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                        {/* 3. Duplicate */}
+                        <button
+                          className="aqm-icon-btn"
+                          onClick={() => handleDuplicate(qz)}
+                          disabled={busyId === qz.id}
+                          title="Duplicate"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
+                        </button>
+                        {/* 4. Delete */}
+                        <button
+                          className="aqm-icon-btn aqm-icon-btn--danger"
+                          onClick={() => setConfirmTarget(qz)}
+                          disabled={busyId === qz.id}
+                          title="Delete"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v6M14 11v6" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pagination pagination={pagination} onPageChange={(p) => load(p)} />
+          </>
+        )}
       </div>
-    </div>
+
+      {confirmTarget && (
+        <ConfirmDialog
+          title="Delete this quiz?"
+          message={`"${confirmTarget.title}" will be removed. Its questions stay in your bank.`}
+          confirmLabel="Delete quiz"
+          isDangerous
+          busy={busyId === confirmTarget.id}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+
+      {attemptQuiz && (
+        <QuizPreviewModal
+          quizTitle={attemptQuiz.title}
+          questions={attemptQuiz.questions}
+          onClose={() => setAttemptQuiz(null)}
+        />
+      )}
+
+      {answerKeyQuiz && (
+        <QuizAnswerKeyModal
+          quizTitle={answerKeyQuiz.title}
+          questions={answerKeyQuiz.questions}
+          onClose={() => setAnswerKeyQuiz(null)}
+        />
+      )}
+    </>
+  );
+}
+
+/* ── Questions tab ────────────────────────────────────────────────────── */
+function QuestionsTab({ categories, showToast }) {
+  const [data, setData] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filters, setFilters] = useState({ q: '', type: '', categoryId: '', difficulty: '', status: '' });
+  const debouncedQ = useDebounced(filters.q, 300);
+  const [editTarget, setEditTarget] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [forceDelete, setForceDelete] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  function load(page = pagination.page) {
+    setLoading(true);
+    setError('');
+    const params = {
+      page,
+      pageSize: pagination.pageSize,
+      sort: 'updated_at:desc',
+    };
+    if (debouncedQ) params.q = debouncedQ;
+    if (filters.type) params.type = filters.type;
+    if (filters.categoryId) params.categoryId = filters.categoryId;
+    if (filters.difficulty) params.difficulty = filters.difficulty;
+    if (filters.status) params.status = filters.status;
+
+    adminQuestionService
+      .list(params)
+      .then((res) => {
+        setData(res.data);
+        setPagination(res.pagination);
+      })
+      .catch((e) => setError(e.message || 'Failed to load questions'))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    load(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ, filters.type, filters.categoryId, filters.difficulty, filters.status]);
+
+  async function handleCreate(value) {
+    setSubmitting(true);
+    try {
+      await adminQuestionService.create(value);
+      showToast('Question created');
+      setCreating(false);
+      load(1);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleUpdate(value) {
+    if (!editTarget) return;
+    setSubmitting(true);
+    try {
+      await adminQuestionService.update(editTarget.id, value);
+      showToast('Question updated');
+      setEditTarget(null);
+      load(pagination.page);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(force = false) {
+    if (!confirmTarget) return;
+    setBusyId(confirmTarget.id);
+    try {
+      await adminQuestionService.remove(confirmTarget.id, { force });
+      showToast('Question deleted');
+      setConfirmTarget(null);
+      setForceDelete(false);
+      load(pagination.page);
+    } catch (e) {
+      if (e.code === 'IN_USE') {
+        setForceDelete(true);
+      } else {
+        showToast(e.message || 'Failed to delete', 'error');
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="aqm-toolbar">
+        <div className="aqm-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search questions…"
+            value={filters.q}
+            onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
+          />
+        </div>
+        <select
+          className="aqm-filter"
+          value={filters.type}
+          onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
+        >
+          <option value="">All format</option>
+          {Object.entries(TYPE_LABELS).map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
+        </select>
+        <select
+          className="aqm-filter"
+          value={filters.categoryId}
+          onChange={(e) => setFilters((f) => ({ ...f, categoryId: e.target.value }))}
+        >
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          className="aqm-filter"
+          value={filters.difficulty}
+          onChange={(e) => setFilters((f) => ({ ...f, difficulty: e.target.value }))}
+        >
+          <option value="">All difficulties</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <button className="aqm-btn aqm-btn--primary" onClick={() => setCreating(true)}>
+          New question
+        </button>
+      </div>
+
+      {error && <p className="aqm-error" style={{ marginBottom: 12 }}>{error}</p>}
+
+      <div className="aqm-table-card">
+        {loading ? (
+          <div className="aqm-table-loading">Loading…</div>
+        ) : data.length === 0 ? (
+          <div className="aqm-table-empty">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
+            <h4>No questions yet</h4>
+            <p>Click <strong>New question</strong> to add one to your bank.</p>
+          </div>
+        ) : (
+          <>
+            <table className="aqm-table">
+              <thead>
+                <tr>
+                  <th>Question</th>
+                  <th>Question format</th>
+                  <th>Category</th>
+                  <th>Difficulty</th>
+                  <th>Used in</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((q) => (
+                  <tr key={q.id}>
+                    <td
+                      className="aqm-qbank-prompt-cell"
+                      title={
+                        q.tags?.length
+                          ? `${q.prompt}\n\n${q.tags.map((t) => `#${t}`).join(' ')}`
+                          : q.prompt
+                      }
+                    >
+                      <div className="aqm-table-title aqm-table-title--single-line">{q.prompt}</div>
+                    </td>
+                    <td>
+                      <span className={`aqm-badge aqm-badge--type-${q.type}`}>
+                        {TYPE_LABELS[q.type] || q.type}
+                      </span>
+                    </td>
+                    <td>
+                      {q.categoryName ? (
+                        <span className="aqm-badge aqm-badge--neutral">{q.categoryName}</span>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`aqm-badge aqm-badge--diff-${q.difficulty}`}>{q.difficulty}</span>
+                    </td>
+                    <td>{q.usageCount}</td>
+                    <td>
+                      <div className="aqm-actions-cell">
+                        <button
+                          className="aqm-icon-btn"
+                          onClick={() => setEditTarget(q)}
+                          title="Edit"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                        <button
+                          className="aqm-icon-btn aqm-icon-btn--danger"
+                          onClick={() => { setConfirmTarget(q); setForceDelete(false); }}
+                          disabled={busyId === q.id}
+                          title="Delete"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v6M14 11v6" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pagination pagination={pagination} onPageChange={(p) => load(p)} />
+          </>
+        )}
+      </div>
+
+      {(creating || editTarget) && (
+        <QuestionEditorModal
+          initial={editTarget}
+          categories={categories}
+          submitting={submitting}
+          onClose={() => { setCreating(false); setEditTarget(null); }}
+          onSubmit={editTarget ? handleUpdate : handleCreate}
+        />
+      )}
+
+      {confirmTarget && (
+        <ConfirmDialog
+          title={forceDelete ? 'Question is in use' : 'Delete this question?'}
+          message={
+            forceDelete
+              ? `This question is linked to ${confirmTarget.usageCount} quiz(zes). Deleting it will also remove it from those quizzes.`
+              : 'It will be removed from your bank. This cannot be undone.'
+          }
+          confirmLabel={forceDelete ? 'Delete anyway' : 'Delete question'}
+          isDangerous
+          busy={busyId === confirmTarget.id}
+          onConfirm={() => handleDelete(forceDelete)}
+          onCancel={() => { setConfirmTarget(null); setForceDelete(false); }}
+        />
+      )}
+    </>
+  );
+}
+
+/* ── Categories tab ───────────────────────────────────────────────────── */
+function CategoriesTab({ categories, reload, showToast }) {
+  const [editing, setEditing] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  async function handleCreate(payload) {
+    setSubmitting(true);
+    try {
+      await adminQuizCategoryService.create(payload);
+      showToast('Category created');
+      setCreating(false);
+      reload();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleUpdate(payload) {
+    if (!editing) return;
+    setSubmitting(true);
+    try {
+      await adminQuizCategoryService.update(editing.id, payload);
+      showToast('Category updated');
+      setEditing(null);
+      reload();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmTarget) return;
+    setBusyId(confirmTarget.id);
+    try {
+      await adminQuizCategoryService.remove(confirmTarget.id);
+      showToast('Category deleted');
+      setConfirmTarget(null);
+      reload();
+    } catch (e) {
+      showToast(e.message || 'Failed to delete category', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="aqm-toolbar">
+        <div className="aqm-cat-toolbar-text">
+          {categories.length === 0 ? (
+            'No categories yet — create one to organize your questions and quizzes.'
+          ) : (
+            <span className="aqm-cat-toolbar-hint">
+              Summary only: cards show how many questions and quizzes use each category—they do not list
+              question text. Use the <strong>Question Bank</strong> tab to view or edit questions.
+            </span>
+          )}
+        </div>
+        <button className="aqm-btn aqm-btn--primary" onClick={() => setCreating(true)}>
+          New category
+        </button>
+      </div>
+
+      {categories.length === 0 ? (
+        <div className="aqm-table-card">
+          <div className="aqm-table-empty">
+            <h4>No categories yet</h4>
+            <p>Categories let you group related questions and filter quizzes.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="aqm-cat-list">
+          {categories.map((c) => (
+            <article key={c.id} className="aqm-cat-card">
+              <div className="aqm-cat-card-actions">
+                <button
+                  type="button"
+                  className="aqm-icon-btn"
+                  onClick={() => setEditing(c)}
+                  title="Edit category"
+                  aria-label="Edit category"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="aqm-icon-btn aqm-icon-btn--danger"
+                  onClick={() => setConfirmTarget(c)}
+                  disabled={busyId === c.id}
+                  title="Delete category"
+                  aria-label="Delete category"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                </button>
+              </div>
+
+              <h4>{c.name}</h4>
+
+              {c.description ? (
+                <p>{c.description}</p>
+              ) : (
+                <p style={{ color: '#94a3b8', fontStyle: 'italic' }}>No description</p>
+              )}
+
+              <div className="aqm-cat-card-meta">
+                <span className="aqm-cat-card-meta-item" title="Questions in this category">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" strokeWidth="2.5" strokeLinecap="round" />
+                  </svg>
+                  <strong>{c.questionCount}</strong> question{c.questionCount === 1 ? '' : 's'}
+                </span>
+                <span className="aqm-cat-card-meta-item" title="Quizzes in this category">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                  <strong>{c.quizCount}</strong> quiz{c.quizCount === 1 ? '' : 'zes'}
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {(creating || editing) && (
+        <CategoryEditorModal
+          initial={editing}
+          submitting={submitting}
+          onClose={() => { setCreating(false); setEditing(null); }}
+          onSubmit={editing ? handleUpdate : handleCreate}
+        />
+      )}
+
+      {confirmTarget && (
+        <ConfirmDialog
+          title="Delete this category?"
+          message={`"${confirmTarget.name}" — questions and quizzes in this category will become uncategorized.`}
+          confirmLabel="Delete category"
+          isDangerous
+          busy={busyId === confirmTarget.id}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+    </>
   );
 }

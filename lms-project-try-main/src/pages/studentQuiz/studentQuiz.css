@@ -1,0 +1,3849 @@
+/* ============================================================
+   STUDENT QUIZ — calm LMS + dev-tool (systematic, low-noise)
+   ============================================================ */
+
+   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+   /* ── Reset & tokens ─────────────────────────────────────── */
+   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+   
+   :root {
+     --bg:           #ffffff;
+     --surface:      #ffffff;
+     --surface-2:    #f8fafc;
+     --border:       #e2e8f0;
+     --border-strong:#cbd5e1;
+   
+     --ink:          #1a1714;
+     --ink-2:        #4a4540;
+     --ink-3:        #8c8278;
+   
+     --accent:       #2d5be3;
+     --accent-light: #e8eefb;
+     --accent-dim:   #9ab0f0;
+   
+     --green:        #16a34a;
+     --green-light:  #dcfce7;
+     --red:          #dc2626;
+     --red-light:    #fee2e2;
+    --amber:        #b45309;
+    --amber-light:  #fff7ed;
+    /* Softer list / badge tones (less “dashboard alert”) */
+    --sq-retry-fg:   #7c2d12;
+    --sq-retry-bg:   #fff7ed;
+    --sq-master-fg:  #166534;
+    --sq-master-bg:  #ecfdf5;
+   
+     --radius-sm:    8px;
+     --radius:       16px;
+     --radius-lg:    24px;
+     --radius-xl:    32px;
+   
+     --shadow-sm:    0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+     --shadow:       0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04);
+     --shadow-lg:    0 16px 48px rgba(0,0,0,.12), 0 4px 16px rgba(0,0,0,.06);
+   
+     --font:         'Sora', sans-serif;
+     /* In-game quiz copy: Inter-like ref (question regular / options bolder + larger) */
+     --font-quiz:    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+     --mono:         'JetBrains Mono', monospace;
+   
+     --ease-spring:  cubic-bezier(.34,1.56,.64,1);
+     --ease-out:     cubic-bezier(.22,1,.36,1);
+   }
+   
+   /* ── Page shell ─────────────────────────────────────────── */
+   .sqGamePage {
+     font-family: var(--font-quiz);
+     --sq-game-ink: #0f172a;
+     --sq-game-muted: #64748b;
+     --sq-game-line: #e2e8f0;
+     --sq-game-surface: rgba(255, 255, 255, 0.82);
+     color: var(--ink);
+     background: linear-gradient(165deg, #1d4ed8 0%, #3b82f6 22%, #93c5fd 55%, #e0f2fe 88%, #f0f9ff 100%);
+     background-attachment: fixed;
+     min-height: calc(100dvh - var(--app-header-height, 84px));
+     height: calc(100dvh - var(--app-header-height, 84px));
+     display: flex;
+     flex-direction: column;
+     -webkit-font-smoothing: antialiased;
+     overflow: hidden;
+   }
+
+   /* In-app “fullscreen”: fills the tab without the browser Fullscreen API (avoids the native Esc overlay). */
+   .sqGamePage.sqGamePage--immersive {
+     position: fixed;
+     inset: 0;
+     z-index: 100;
+     width: 100%;
+     max-width: 100%;
+     min-height: 100dvh;
+     height: 100dvh;
+     --app-header-height: 0px;
+   }
+
+   /* Fallback when programmatic fullscreen is blocked — user gesture retry */
+   .sqFsRibbon {
+     position: fixed;
+     top: 0;
+     left: 0;
+     right: 0;
+     z-index: 220;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     flex-wrap: wrap;
+     gap: 10px 16px;
+     padding: 10px 16px;
+     background: rgba(15, 23, 42, 0.92);
+     color: #f8fafc;
+     font-size: 13px;
+     font-weight: 600;
+   }
+
+   .sqFsRibbonText {
+     margin: 0;
+     text-align: center;
+   }
+
+   .sqFsRibbonBtn {
+     border: none;
+     border-radius: var(--radius-sm);
+     padding: 8px 16px;
+     font: inherit;
+     font-weight: 700;
+     cursor: pointer;
+     background: #fff;
+     color: var(--accent);
+   }
+
+   .sqFsRibbonBtn:hover {
+     filter: brightness(0.97);
+   }
+
+   /* ── Quiz header: timer + compact progress (supporting utilities) ─── */
+   .sqGameQuizTop {
+     flex-shrink: 0;
+     width: 100%;
+     padding-top: 0;
+     margin-bottom: 12px;
+   }
+
+   .sqGameCard--top {
+     padding: 0;
+   }
+
+   .sqGameHeader {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: center;
+     justify-content: center;
+     gap: 12px 20px;
+     width: 100%;
+   }
+
+   .sqGameTimer {
+     display: inline-flex;
+     align-items: center;
+     gap: 10px;
+     padding: 6px 12px 6px 8px;
+     border-radius: 12px;
+     color: var(--sq-game-ink);
+   }
+
+   /* Supportive timer — light surface, no glow */
+   .sqGameTimer.sqGameTimer--compact {
+     background: var(--sq-game-surface);
+     border: 1px solid var(--sq-game-line);
+     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+     backdrop-filter: blur(10px);
+     -webkit-backdrop-filter: blur(10px);
+   }
+
+   .sqGameTimerIconWrap {
+     flex-shrink: 0;
+     width: 32px;
+     height: 32px;
+     border-radius: 8px;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     background: #f1f5f9;
+     border: 1px solid #e2e8f0;
+     color: #475569;
+   }
+
+   .sqGameTimerIcon {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+   }
+
+   .sqGameTimerTexts {
+     display: flex;
+     flex-direction: column;
+     align-items: flex-start;
+     justify-content: center;
+     line-height: 1.1;
+     gap: 2px;
+     min-width: 0;
+   }
+
+   .sqGameTimerLabel {
+     font-size: 10px;
+     font-weight: 600;
+     letter-spacing: 0.06em;
+     text-transform: uppercase;
+     color: var(--sq-game-muted);
+   }
+
+   .sqGameTimerValue {
+     font-family: var(--mono);
+     font-size: clamp(1rem, 2.6vw, 1.2rem);
+     font-weight: 600;
+     font-variant-numeric: tabular-nums;
+     letter-spacing: 0.02em;
+     color: var(--sq-game-ink);
+     line-height: 1;
+   }
+   
+   /* ── Body ────────────────────────────────────────────────── */
+   .sqGameBody {
+     flex: 1;
+     max-width: 920px;
+     margin: 0 auto;
+     width: 100%;
+     padding: 8px 18px 16px;
+     display: flex;
+     flex-direction: column;
+     gap: 0;
+     min-height: 0;
+     overflow-y: auto;
+     overflow-x: hidden;
+     -webkit-overflow-scrolling: touch;
+   }
+
+   /* Center column: tighter vertical rhythm */
+   .sqGameStage {
+     flex: 1;
+     min-height: 0;
+     display: flex;
+     flex-direction: column;
+     justify-content: center;
+     align-items: center;
+     width: 100%;
+     gap: clamp(10px, 2vh, 20px);
+     padding: clamp(4px, 1.2vh, 12px) 0;
+   }
+
+   .sqGameStage.sqGameStage--choiceStack {
+     justify-content: flex-start;
+     gap: clamp(24px, 4.5vh, 44px);
+   }
+
+   .sqGameQuestionDock {
+     width: 100%;
+     max-width: 920px;
+     margin: 0 auto;
+     padding: 0 clamp(10px, 3.2vw, 22px) clamp(8px, 1.5vh, 16px);
+     flex-shrink: 0;
+   }
+
+   /* Clear band of gradient between question bar and option tiles */
+   .sqGameQuestionDock .sqGameCardShell--question {
+     margin-bottom: clamp(28px, 5vh, 52px);
+   }
+
+   /* ── Loading ─────────────────────────────────────────────── */
+   .sqGameLoadingText {
+     color: rgba(255, 255, 255, 0.92);
+     font-size: 16px;
+     margin-top: 48px;
+     text-align: center;
+   }
+
+   /* ── Exit link ───────────────────────────────────────────── */
+   .sqGameExit {
+     display: inline-flex;
+     align-items: center;
+     gap: 6px;
+     font-size: 13px;
+     font-weight: 600;
+     color: rgba(255, 255, 255, 0.95);
+     text-decoration: none;
+     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+     transition: color .2s;
+     align-self: flex-start;
+     flex-shrink: 0;
+     margin-bottom: 4px;
+   }
+   .sqGameExit:hover { color: #fff; }
+   
+   .sqGameBodyMessage {
+     font-family: var(--font-quiz);
+     font-size: 15px;
+     line-height: 1.55;
+     color: rgba(255, 255, 255, 0.95);
+     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+     max-width: 52ch;
+   }
+   
+   /* ── Card shell (question block — flat, not a floating card) ─ */
+   .sqGameCardShell {
+     position: relative;
+     animation: cardEnter .32s var(--ease-spring) both;
+     width: 100%;
+     max-width: 640px;
+   }
+   
+   /* After .sqGameCardShell: same specificity wins by order; without this, 640px cap
+      stays on .sqGameCardShell--top and the header sits left in a wide column. */
+   .sqGameCardShell.sqGameCardShell--top {
+     max-width: none;
+   }
+
+   /* Question card + overlapping count pill (ref: half pill on top edge) */
+   .sqGameCardShell--question {
+     max-width: min(1180px, 100%);
+     width: 100%;
+     margin-bottom: clamp(22px, 4vh, 40px);
+     min-height: 0;
+     overflow: visible;
+     padding-top: 16px;
+   }
+
+   .sqGameCard--questionBox {
+     position: relative;
+     overflow: visible;
+     background: rgba(15, 18, 28, 0.78);
+     border: 1px solid rgba(255, 255, 255, 0.08);
+     border-radius: 12px;
+     padding: clamp(28px, 4.2vw, 42px) clamp(24px, 3.8vw, 36px) clamp(22px, 3.4vw, 32px);
+     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+     backdrop-filter: blur(14px);
+     -webkit-backdrop-filter: blur(14px);
+     min-height: 0;
+   }
+
+   .sqGameQCountPill {
+     position: absolute;
+     top: 0;
+     left: 50%;
+     z-index: 3;
+     transform: translate(-50%, -50%);
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     gap: 0;
+     padding: 7px 16px;
+     border-radius: 999px;
+     font-family: var(--font-quiz);
+     font-size: 13px;
+     font-weight: 600;
+     font-variant-numeric: tabular-nums;
+     letter-spacing: 0.02em;
+     white-space: nowrap;
+     background: rgba(15, 18, 28, 0.92);
+     border: 1px solid rgba(234, 179, 8, 0.85);
+     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+     backdrop-filter: blur(10px);
+     -webkit-backdrop-filter: blur(10px);
+   }
+
+   .sqGameQCountPillCur {
+     color: #fbbf24;
+   }
+
+   .sqGameQCountPillRest {
+     color: rgba(255, 255, 255, 0.95);
+     font-weight: 500;
+   }
+
+   .sqGameCard--questionBox .sqGameCodeImg {
+     margin-bottom: 16px;
+     border: 1px solid rgba(255, 255, 255, 0.12);
+     border-radius: 12px;
+     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+   }
+
+   /* Prompt scroll area: same surface as card — one border only */
+   .sqGameQPromptPanel {
+     width: 100%;
+     min-height: 0;
+     max-height: clamp(120px, 28vh, 260px);
+     overflow-x: auto;
+     overflow-y: auto;
+     overscroll-behavior: contain;
+     -webkit-overflow-scrolling: touch;
+     scrollbar-gutter: stable;
+     padding: 10px 0 0;
+     box-sizing: border-box;
+     text-align: center;
+     background: transparent;
+     border: none;
+     border-radius: 0;
+     box-shadow: none;
+   }
+
+   .sqGameQPromptPanel::-webkit-scrollbar {
+     width: 8px;
+     height: 8px;
+   }
+
+   .sqGameQPromptPanel::-webkit-scrollbar-thumb {
+     background: rgba(255, 255, 255, 0.22);
+     border-radius: 6px;
+   }
+
+   .sqGameQPromptPanel::-webkit-scrollbar-track {
+     background: rgba(0, 0, 0, 0.12);
+     border-radius: 6px;
+   }
+
+   .sqGameCard--questionBox .sqGameQPromptPanel .sqGameQText--boxed {
+     font-family: var(--font-quiz);
+     font-size: clamp(1.08rem, 2.25vw, 1.28rem);
+     font-weight: 400;
+     line-height: 1.55;
+     letter-spacing: 0.01em;
+     color: #fff;
+     text-align: center;
+     margin: 0;
+     max-width: none;
+   }
+
+   /* code_image: monospace + newlines (scroll on .sqGameQPromptPanel) */
+   .sqGameCodeSnippet {
+     font-family: var(--mono);
+     font-size: clamp(11px, 1.95vw, 13.5px);
+     font-weight: 500;
+     line-height: 1.55;
+     letter-spacing: 0.01em;
+     tab-size: 4;
+     -moz-tab-size: 4;
+     white-space: pre-wrap;
+     word-break: break-word;
+     overflow-wrap: anywhere;
+     text-align: left;
+     margin: 0;
+     width: 100%;
+     max-width: 100%;
+     min-height: 0;
+     padding: 0;
+     box-sizing: border-box;
+     color: #fff;
+     background: transparent;
+     border: none;
+     box-shadow: none;
+   }
+   
+   @keyframes cardEnter {
+     from { opacity: 0; transform: translateY(8px); }
+     to   { opacity: 1; transform: none; }
+   }
+   
+   .sqGameQHead {
+     display: flex;
+     flex-direction: column;
+     align-items: center;
+     justify-content: center;
+     gap: 12px;
+     text-align: center;
+   }
+   
+   .sqGameQHeadMain {
+     flex: 1;
+     min-width: 0;
+     width: 100%;
+     text-align: center;
+   }
+   
+   /* ── Question panel (editorial strip — not the main question box) ─ */
+   .sqGameCard:not(.sqGameCard--questionBox) {
+     background: transparent;
+     border: none;
+     border-radius: 0;
+     padding: 4px 0 8px;
+     box-shadow: none;
+     transition: opacity .3s, filter .3s;
+     position: relative;
+     overflow: visible;
+     text-align: center;
+   }
+   
+   .sqGameCard::before {
+     display: none;
+   }
+   
+   /* ── Q metadata (legacy strip; in-card title uses --inCard) ─ */
+   .sqGameQTitle {
+     font-size: 13px;
+     font-weight: 600;
+     letter-spacing: 0.02em;
+     text-transform: none;
+     color: var(--sq-game-muted);
+     margin-bottom: 4px;
+   }
+
+   .sqGameQTitle--inCard {
+     font-size: 16px;
+     font-weight: 600;
+     color: #fff;
+     margin: 0;
+     text-align: center;
+   }
+
+   .sqGameQTitle--inCard .sqGameQIdx {
+     font-weight: 600;
+     color: rgba(255, 255, 255, 0.88);
+   }
+
+   .sqGameQIdx {
+     font-family: var(--font-quiz);
+     font-size: inherit;
+     font-weight: 600;
+   }
+   
+   .sqGameCategory {
+     font-size: 13px;
+     color: var(--sq-game-muted);
+     font-weight: 500;
+     margin-bottom: 0;
+     line-height: 1.4;
+   }
+
+   .sqGameQText {
+     font-family: var(--font-quiz);
+     font-size: clamp(1.08rem, 2.25vw, 1.28rem);
+     font-weight: 400;
+     line-height: 1.5;
+     letter-spacing: 0.01em;
+     color: #e2e8f0;
+     text-align: center;
+     max-width: 38ch;
+     margin-left: auto;
+     margin-right: auto;
+     margin-bottom: clamp(10px, 2vw, 16px);
+   }
+   
+   /* ── Code image ──────────────────────────────────────────── */
+   .sqGameCodeImg {
+     border-radius: 12px;
+     overflow: hidden;
+     margin: 0 auto 12px;
+     border: 1px solid #e2e8f0;
+     max-width: 100%;
+   }
+   .sqGameCodeImg img { width: 100%; display: block; }
+   
+   /* ── Options grid ────────────────────────────────────────── */
+   .sqGameOpts {
+     display: flex;
+     flex-direction: column;
+     gap: 10px;
+     align-items: center;
+     width: 100%;
+   }
+   
+   .sqGameOpts--grid {
+     display: grid;
+     --sq-opts-gap: clamp(14px, 2.8vw, 22px);
+     gap: var(--sq-opts-gap);
+     width: 100%;
+     max-width: min(1180px, 100%);
+     margin: 0 auto;
+     justify-items: stretch;
+     align-items: stretch;
+   }
+   
+   .sqGameOpts--cols-1 { grid-template-columns: minmax(0, 1fr); max-width: 280px; }
+   /* Two tiles: wider cells than /4 so each option box reads larger */
+   .sqGameOpts--cols-2 {
+     grid-template-columns: repeat(2, calc((100% - 3 * var(--sq-opts-gap)) / 3.35));
+     justify-content: center;
+   }
+   .sqGameOpts--cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+   .sqGameOpts--cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+   /* Full-width option row */
+   .sqGameOpts--fullBleed {
+     width: 100%;
+     align-self: stretch;
+     max-width: 100%;
+     margin: 0 0 clamp(8px, 2vh, 14px);
+     padding: 0 clamp(10px, 3.2vw, 22px);
+     box-sizing: border-box;
+     --sq-opts-gap: clamp(8px, 2vw, 14px);
+     gap: var(--sq-opts-gap);
+   }
+
+   /* True/false etc.: same *tile* footprint as one cell in the 4-up row (centered pair) */
+   .sqGameOpts--fullBleed.sqGameOpts--cols-2 {
+     grid-template-columns: repeat(2, minmax(0, 1fr));
+     width: 100%;
+     max-width: calc(50% - var(--sq-opts-gap) / 2);
+     margin-left: auto;
+     margin-right: auto;
+   }
+
+   .sqGameOpts--fullBleed.sqGameOpts--cols-3 {
+     grid-template-columns: repeat(3, minmax(0, 1fr));
+     width: 100%;
+     max-width: calc(75% - var(--sq-opts-gap));
+     margin-left: auto;
+     margin-right: auto;
+   }
+
+   .sqGameOpts--fullBleed.sqGameOpts--cols-4 {
+     grid-template-columns: repeat(4, minmax(0, 1fr));
+   }
+
+   .sqGameOpts--fullBleed .sqGameOpt--tile {
+     position: relative;
+     width: 100%;
+     aspect-ratio: 1;
+     max-height: min(42vw, 52vh);
+     padding: clamp(12px, 2.8vw, 18px) clamp(10px, 2.2vw, 14px);
+     gap: 0;
+     justify-content: center;
+     /* Radius + glass inherited from .sqGameOpt--tile; only geometry here */
+   }
+
+   .sqGameOpts--fullBleed .sqGameOptText--tile {
+     font-family: var(--font-quiz);
+     color: var(--sq-game-ink);
+     font-weight: 600;
+     font-size: clamp(1.1rem, 2.85vw, 1.42rem);
+     line-height: 1.28;
+     letter-spacing: 0.01em;
+     -webkit-line-clamp: 5;
+     line-clamp: 5;
+   }
+
+   /* ── Option targets (light surfaces on calm canvas) ─ */
+   .sqGameOpt--tile {
+     font-family: var(--font-quiz);
+     display: flex;
+     flex-direction: column;
+     align-items: center;
+     justify-content: center;
+     text-align: center;
+     gap: 0;
+     width: 100%;
+     min-width: 0;
+     aspect-ratio: 1;
+     min-height: 0;
+     color: var(--sq-game-ink);
+     background: rgba(255, 255, 255, 0.88);
+     border: 1px solid var(--sq-game-line);
+     border-radius: 12px;
+     padding: clamp(12px, 2.6vw, 22px) clamp(10px, 2vw, 16px);
+     cursor: pointer;
+     backdrop-filter: blur(8px);
+     -webkit-backdrop-filter: blur(8px);
+     transition:
+       border-color .16s ease,
+       background .16s ease,
+       box-shadow .16s ease,
+       transform .18s var(--ease-out);
+     animation: optIn .28s var(--ease-out) both;
+     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+   }
+
+   .sqGameOpt--tile:nth-child(1) { animation-delay: .03s; }
+   .sqGameOpt--tile:nth-child(2) { animation-delay: .06s; }
+   .sqGameOpt--tile:nth-child(3) { animation-delay: .09s; }
+   .sqGameOpt--tile:nth-child(4) { animation-delay: .12s; }
+
+   @keyframes optIn {
+     from { opacity: 0; transform: translateY(6px); }
+     to   { opacity: 1; transform: none; }
+   }
+
+   .sqGameOpt--tile:hover {
+     border-color: #cbd5e1;
+     background: #fff;
+     transform: translateY(-1px);
+     box-shadow:
+       0 2px 6px rgba(15, 23, 42, 0.07),
+       0 8px 20px rgba(15, 23, 42, 0.06);
+   }
+
+   .sqGameOpt--tile:active { transform: translateY(0) scale(0.995); }
+
+   .sqGameOpt--tile.sqGameOpt--selected {
+     border: 2px solid #3b82f6;
+     background: rgba(239, 246, 255, 0.95);
+     box-shadow:
+       0 0 0 1px rgba(59, 130, 246, 0.12),
+       0 2px 8px rgba(37, 99, 235, 0.08);
+     transform: translateY(-1px);
+   }
+
+   .sqGameOpt--tile.sqGameOpt--selected:hover {
+     border-color: #2563eb;
+     background: #eff6ff;
+     box-shadow:
+       0 0 0 1px rgba(59, 130, 246, 0.18),
+       0 4px 12px rgba(37, 99, 235, 0.1);
+   }
+
+   /* Pick-to-advance: left-to-right fill on selected tile before auto-next */
+   .sqGameOpt--tile.sqGameOpt--fillProgress {
+     position: relative;
+     overflow: hidden;
+     pointer-events: none;
+   }
+
+   .sqGameOpt--tile.sqGameOpt--fillProgress::after {
+     content: '';
+     position: absolute;
+     inset: 0;
+     z-index: 0;
+     border-radius: inherit;
+     transform: scaleX(0);
+     transform-origin: left center;
+     background: linear-gradient(
+       90deg,
+       rgba(255, 255, 255, 0.55),
+       rgba(255, 255, 255, 0.1)
+     );
+     animation: sqGameOptFill 0.7s ease forwards;
+     pointer-events: none;
+   }
+
+   .sqGameOpts--fullBleed .sqGameOpt--tile.sqGameOpt--fillProgress::after {
+     background: linear-gradient(
+       90deg,
+       rgba(191, 219, 254, 0.65),
+       rgba(255, 255, 255, 0.35)
+     );
+   }
+
+   .sqGameOpt--tile.sqGameOpt--fillProgress .sqGameOptText--tile {
+     position: relative;
+     z-index: 1;
+   }
+
+   .sqGameOpt--tile.sqGameOpt--fillProgress:hover {
+     transform: none;
+   }
+
+   @keyframes sqGameOptFill {
+     from { transform: scaleX(0); }
+     to { transform: scaleX(1); }
+   }
+   
+   .sqGameOptText--tile {
+     font-family: var(--font-quiz);
+     font-size: clamp(1.06rem, 2.75vw, 1.38rem);
+     font-weight: 600;
+     line-height: 1.3;
+     letter-spacing: 0.01em;
+     color: var(--sq-game-ink);
+     word-break: break-word;
+     white-space: pre-wrap;
+     display: -webkit-box;
+     -webkit-line-clamp: 5;
+     line-clamp: 5;
+     -webkit-box-orient: vertical;
+     overflow: hidden;
+   }
+   
+   /* ── Fill blank (underline field on gradient) ───────────── */
+   .sqGameFillForm {
+     display: contents;
+   }
+
+   .sqGameFillBlock {
+     margin-top: 2px;
+     width: 100%;
+     max-width: 480px;
+     text-align: center;
+   }
+   
+   .sqGameFillLabel {
+     display: block;
+     font-size: 11px;
+     font-weight: 600;
+     letter-spacing: 0.06em;
+     text-transform: uppercase;
+     color: var(--sq-game-muted);
+     margin-bottom: 8px;
+   }
+
+   .sqGameFill {
+     font-family: var(--font-quiz);
+     width: 100%;
+     padding: 14px 16px;
+     font-size: 1.0625rem;
+     font-weight: 500;
+     color: var(--sq-game-ink);
+     background: #fff;
+     border: 1px solid var(--sq-game-line);
+     border-radius: 12px;
+     outline: none;
+     transition: border-color .18s, box-shadow .18s;
+   }
+   .sqGameFill:focus {
+     border-color: #93c5fd;
+     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+   }
+   .sqGameFill::placeholder { color: var(--ink-3); }
+   
+   /* ── Error ───────────────────────────────────────────────── */
+   .sqGameErr {
+     font-size: 14px;
+     color: var(--red);
+     background: var(--red-light);
+     padding: 12px 16px;
+     border-radius: var(--radius-sm);
+     border: 1px solid #fca5a5;
+     max-width: 480px;
+     width: 100%;
+     text-align: center;
+   }
+   
+   /* ── Jump bar (lightweight dock) ─────────────────────────── */
+   .sqGameNavSheet {
+     background: rgba(255, 255, 255, 0.78);
+     backdrop-filter: blur(10px);
+     -webkit-backdrop-filter: blur(10px);
+     border: 1px solid var(--sq-game-line);
+     border-radius: 12px;
+     padding: 8px 12px 8px;
+     flex-shrink: 0;
+     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+   }
+
+   .sqGameNavSheet--fullBleed {
+     width: 100%;
+     align-self: stretch;
+     margin-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+     border-radius: 12px 12px 0 0;
+     border-left: none;
+     border-right: none;
+     border-bottom: none;
+     padding-left: clamp(12px, 3.5vw, 22px);
+     padding-right: clamp(12px, 3.5vw, 22px);
+     padding-top: 10px;
+     padding-bottom: 8px;
+     box-shadow: 0 -4px 24px rgba(15, 23, 42, 0.06);
+   }
+
+   .sqGameNavHeaderRow {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     flex-wrap: wrap;
+     gap: 6px 12px;
+     margin-bottom: 6px;
+   }
+
+   .sqGameNavTitle {
+     font-size: 11px;
+     font-weight: 600;
+     letter-spacing: 0.06em;
+     text-transform: uppercase;
+     color: var(--sq-game-muted);
+     margin-bottom: 0;
+   }
+
+   .sqGameNavTrack {
+     display: flex;
+     flex-wrap: nowrap;
+     gap: 6px;
+     overflow-x: auto;
+     padding-bottom: 4px;
+     margin-bottom: 0;
+     -webkit-overflow-scrolling: touch;
+     scrollbar-width: thin;
+   }
+
+   .sqGameNavDot {
+     font-family: var(--mono);
+     font-size: 11px;
+     font-weight: 600;
+     width: 32px;
+     height: 32px;
+     min-width: 32px;
+     border-radius: 8px;
+     background: #f8fafc;
+     border: 1px solid #e2e8f0;
+     color: #475569;
+     cursor: pointer;
+     transition: background .14s, border-color .14s, transform .14s ease, box-shadow .14s;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     flex-shrink: 0;
+     box-shadow: none;
+   }
+   .sqGameNavDot:hover {
+     transform: translateY(-1px);
+     border-color: #cbd5e1;
+     background: #fff;
+   }
+   .sqGameNavDot--cur  {
+     background: #eff6ff;
+     border-color: #3b82f6;
+     color: #1d4ed8;
+     box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+   }
+   .sqGameNavDot--ok   { background: #ecfdf5; border-color: #86efac; color: #15803d; }
+   .sqGameNavDot--skip { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+   .sqGameNavDot--flag { background: #fefce8; border-color: #fde047; color: #854d0e; }
+
+   .sqGameNavDot:disabled {
+     opacity: 0.42;
+     cursor: not-allowed;
+     transform: none;
+     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+   }
+   .sqGameNavDot:disabled:hover {
+     transform: none;
+     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+   }
+   
+   .sqGameLegend {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 14px 18px;
+     font-size: 12px;
+     color: var(--ink-3);
+     font-weight: 500;
+   }
+   
+   .sqGameLegend--compact {
+     gap: 8px 12px;
+     font-size: 11px;
+     color: var(--sq-game-muted);
+     font-weight: 500;
+   }
+   .sqGameLegend--compact span { display: flex; align-items: center; gap: 4px; }
+   
+   .sqGameLegend span { display: flex; align-items: center; gap: 5px; }
+   
+   .sqGameLegendDot {
+     display: inline-block;
+     width: 8px;
+     height: 8px;
+     border-radius: 50%;
+   }
+   .sqGameLegendDot--cur  { background: #3b82f6; box-shadow: none; }
+   .sqGameLegendDot--ok   { background: var(--green); }
+   .sqGameLegendDot--skip { background: var(--amber); }
+   
+   /* ── Fixed CTA ───────────────────────────────────────────── */
+   .sqGameFixedCTA {
+     position: fixed;
+     bottom: 0; left: 0; right: 0;
+     padding: 10px 18px calc(10px + env(safe-area-inset-bottom, 0));
+     background: rgba(255, 255, 255, 0.9);
+     backdrop-filter: blur(12px);
+     border-top: 1px solid rgba(255, 255, 255, 0.65);
+     box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.06);
+     z-index: 60;
+   }
+   
+   .sqGameNext {
+     font-family: var(--font);
+     display: block;
+     width: 100%;
+     max-width: 920px;
+     margin: 0 auto;
+     padding: 12px 22px;
+     font-size: 0.9375rem;
+     font-weight: 700;
+     color: #fff;
+     background: var(--accent);
+     border: none;
+     border-radius: 12px;
+     cursor: pointer;
+     transition: background .18s, transform .18s var(--ease-spring), box-shadow .18s, opacity .18s;
+     box-shadow: 0 4px 18px rgba(45, 91, 227, 0.35);
+   }
+   .sqGameNext:hover:not(:disabled) {
+     background: #2450cc;
+     transform: translateY(-1px);
+     box-shadow: 0 6px 20px rgba(45,91,227,.4);
+   }
+   .sqGameNext:active:not(:disabled) { transform: scale(.98); }
+   .sqGameNext:disabled {
+     background: var(--surface-2);
+     color: var(--ink-3);
+     box-shadow: none;
+     cursor: not-allowed;
+     opacity: .7;
+   }
+   
+   /* ── Completion overlay ──────────────────────────────────── */
+   .sqDoneOverlay {
+     position: fixed;
+     inset: 0;
+     background: rgba(26,23,20,.55);
+     backdrop-filter: blur(8px);
+     z-index: 200;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     padding: 20px;
+     animation: overlayIn .35s var(--ease-out) both;
+   }
+   
+   @keyframes overlayIn {
+     from { opacity: 0; }
+     to   { opacity: 1; }
+   }
+   
+   .sqDoneCard {
+     background: var(--surface);
+     border-radius: var(--radius-xl);
+     width: 100%;
+     max-width: 520px;
+     box-shadow: var(--shadow-lg);
+     overflow: hidden;
+     animation: doneCardIn .5s var(--ease-spring) both .1s;
+   }
+   
+   @keyframes doneCardIn {
+     from { opacity: 0; transform: translateY(32px) scale(.94); }
+     to   { opacity: 1; transform: none; }
+   }
+   
+   /* ── Done card head ──────────────────────────────────────── */
+   .sqDoneCardHead {
+     padding: 32px 28px 24px;
+     background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+     border-bottom: 1px solid var(--border);
+   }
+   
+   .sqDoneHeadVisual {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     margin-bottom: 20px;
+   }
+   
+   .sqDoneBadge {
+     width: 80px;
+     height: 80px;
+     border-radius: 50%;
+     background: var(--surface);
+     border: 2px solid var(--border);
+     box-shadow: var(--shadow);
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     font-size: 36px;
+     animation: badgePop .6s var(--ease-spring) both .3s;
+   }
+   
+   @keyframes badgePop {
+     from { transform: scale(0) rotate(-20deg); opacity: 0; }
+     to   { transform: none; opacity: 1; }
+   }
+   
+   .sqDoneEmoji { font-size: 36px; }
+   
+   .sqDoneTitle {
+     font-size: 26px;
+     font-weight: 800;
+     color: var(--ink);
+     text-align: center;
+     margin-bottom: 4px;
+     letter-spacing: -.02em;
+   }
+   
+   .sqDoneQuizName {
+     font-size: 13px;
+     color: var(--ink-3);
+     font-weight: 500;
+     text-align: center;
+     margin-bottom: 6px;
+   }
+   
+   .sqDoneSub {
+     font-size: 13px;
+     color: var(--ink-3);
+     text-align: center;
+     margin-bottom: 24px;
+   }
+   
+   /* ── Score big display ───────────────────────────────────── */
+   .sqDoneScoreBig {
+     text-align: center;
+     margin-bottom: 24px;
+   }
+   
+   .sqDoneScoreNum {
+     font-size: 64px;
+     font-weight: 800;
+     letter-spacing: -.04em;
+     color: var(--accent);
+     line-height: 1;
+     font-family: var(--mono);
+     display: block;
+     animation: scoreCount .8s var(--ease-out) both .4s;
+   }
+   
+   @keyframes scoreCount {
+     from { opacity: 0; transform: scale(.6); }
+     to   { opacity: 1; transform: none; }
+   }
+   
+   .sqDoneScoreLabel {
+     font-size: 12px;
+     font-weight: 600;
+     letter-spacing: .1em;
+     text-transform: uppercase;
+     color: var(--ink-3);
+     margin-top: 4px;
+   }
+   
+   /* ── Stat grid ───────────────────────────────────────────── */
+   .sqDoneStatGrid {
+     display: grid;
+     grid-template-columns: repeat(3, 1fr);
+     gap: 10px;
+   }
+   
+   .sqDoneStat {
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius);
+     padding: 14px 12px;
+     display: flex;
+     flex-direction: column;
+     align-items: center;
+     gap: 4px;
+     text-align: center;
+     animation: statSlide .4s var(--ease-spring) both;
+   }
+   
+   .sqDoneStat:nth-child(1) { animation-delay: .35s; }
+   .sqDoneStat:nth-child(2) { animation-delay: .42s; }
+   .sqDoneStat:nth-child(3) { animation-delay: .49s; }
+   .sqDoneStat:nth-child(4) { animation-delay: .56s; }
+   .sqDoneStat:nth-child(5) { animation-delay: .63s; }
+   .sqDoneStat:nth-child(6) { animation-delay: .70s; }
+   
+   @keyframes statSlide {
+     from { opacity: 0; transform: translateY(12px); }
+     to   { opacity: 1; transform: none; }
+   }
+   
+   .sqDoneStatLabel {
+     font-size: 10px;
+     font-weight: 700;
+     letter-spacing: .1em;
+     text-transform: uppercase;
+     color: var(--ink-3);
+   }
+   
+   .sqDoneStatValue {
+     font-size: 22px;
+     font-weight: 800;
+     font-family: var(--mono);
+     color: var(--ink);
+     letter-spacing: -.02em;
+   }
+   
+   .sqDoneStatValue--accent { color: var(--accent); }
+   .sqDoneStatValue--ok     { color: var(--green); }
+   .sqDoneStatValue--bad    { color: var(--red); }
+   
+   /* ── Done card foot ──────────────────────────────────────── */
+   .sqDoneCardFoot {
+     padding: 20px 28px;
+     display: flex;
+     gap: 10px;
+   }
+   
+   .sqDoneBtn {
+     font-family: var(--font);
+     flex: 1;
+     padding: 13px 20px;
+     font-size: 14px;
+     font-weight: 700;
+     border-radius: var(--radius);
+     cursor: pointer;
+     transition: all .18s var(--ease-spring);
+   }
+   
+   .sqDoneBtn--ghost {
+     background: var(--surface-2);
+     border: 1.5px solid var(--border);
+     color: var(--ink-2);
+   }
+   .sqDoneBtn--ghost:hover {
+     background: var(--border);
+     transform: translateY(-1px);
+   }
+   
+   .sqDoneBtn--primary {
+     background: var(--accent);
+     border: none;
+     color: #fff;
+     box-shadow: 0 4px 14px rgba(45,91,227,.35);
+   }
+   .sqDoneBtn--primary:hover {
+     background: #2450cc;
+     transform: translateY(-1px);
+     box-shadow: 0 6px 20px rgba(45,91,227,.4);
+   }
+   
+   /* ── Submit confirmation modal ───────────────────────────── */
+   .sqSubmitConfirmOverlay {
+     position: fixed;
+     inset: 0;
+     background: rgba(26,23,20,.55);
+     backdrop-filter: blur(8px);
+     z-index: 205;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     padding: 20px;
+     animation: overlayIn .35s var(--ease-out) both;
+   }
+   
+   .sqSubmitConfirmCard {
+     position: relative;
+     background: var(--surface);
+     border-radius: var(--radius-xl);
+     width: 100%;
+     max-width: 420px;
+     padding: 28px 26px 22px;
+     box-shadow: var(--shadow-lg);
+     border: 1px solid var(--border);
+     animation: doneCardIn .5s var(--ease-spring) both .08s;
+   }
+   
+   .sqSubmitConfirmClose {
+     position: absolute;
+     top: 12px;
+     right: 12px;
+     width: 36px;
+     height: 36px;
+     border-radius: 10px;
+     border: none;
+     background: transparent;
+     color: var(--ink-3);
+     cursor: pointer;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     transition: background .15s, color .15s;
+   }
+   .sqSubmitConfirmClose:hover {
+     background: var(--surface-2);
+     color: var(--ink);
+   }
+   
+   .sqSubmitConfirmIcon {
+     width: 52px;
+     height: 52px;
+     margin: 0 auto 18px;
+     border-radius: 50%;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     background: linear-gradient(145deg, rgba(45,91,227,.14), rgba(45,91,227,.05));
+     color: var(--accent);
+     border: 1px solid rgba(45,91,227,.22);
+   }
+   
+   .sqSubmitConfirmTitle {
+     font-size: 20px;
+     font-weight: 800;
+     color: var(--ink);
+     text-align: center;
+     margin: 0 0 10px;
+     letter-spacing: -.02em;
+     line-height: 1.25;
+     padding: 0 32px 0 8px;
+   }
+   
+   .sqSubmitConfirmText {
+     font-size: 14px;
+     line-height: 1.55;
+     color: var(--ink-3);
+     text-align: center;
+     margin: 0 0 22px;
+   }
+   
+   .sqSubmitConfirmActions {
+     display: flex;
+     gap: 10px;
+   }
+   
+   .sqSubmitConfirmBtn {
+     flex: 1;
+     min-width: 0;
+   }
+   
+   /* ── Responsive ──────────────────────────────────────────── */
+   @media (max-width: 520px) {
+     .sqGameBody { padding: 6px 14px 16px; }
+     .sqGameStage { gap: 12px; padding: 6px 0; }
+     .sqGameQText {
+       font-size: clamp(1rem, 3.8vw, 1.22rem);
+     }
+     .sqGameQPromptPanel {
+       max-height: clamp(100px, 30vh, 200px);
+       padding: 8px 0 0;
+     }
+     .sqGameCard--questionBox .sqGameQPromptPanel .sqGameQText--boxed {
+       font-size: clamp(1rem, 3.8vw, 1.22rem);
+     }
+     .sqGameCodeSnippet {
+       font-size: 10px;
+     }
+     .sqGameOpts--grid { max-width: 100%; --sq-opts-gap: 12px; gap: var(--sq-opts-gap); }
+     .sqGameOpts--cols-2 {
+       grid-template-columns: repeat(2, calc((100% - 3 * var(--sq-opts-gap)) / 3.15));
+     }
+     .sqGameOpts--fullBleed .sqGameOpt--tile {
+       max-height: min(50vw, 38vh);
+       padding: 10px 8px;
+     }
+
+     .sqGameOpts--fullBleed .sqGameOptText--tile {
+       font-size: clamp(1rem, 3.6vw, 1.28rem);
+     }
+
+     .sqGameOptText--tile {
+       font-size: clamp(0.98rem, 3.5vw, 1.22rem);
+     }
+
+     .sqGameTimer.sqGameTimer--compact {
+       padding: 5px 10px 5px 6px;
+       gap: 8px;
+     }
+
+     .sqGameTimerIconWrap {
+       width: 28px;
+       height: 28px;
+     }
+
+     .sqGameTimerValue {
+       font-size: clamp(0.95rem, 4.5vw, 1.1rem);
+     }
+
+     .sqGameQCountPill {
+       font-size: 12px;
+       padding: 6px 12px;
+     }
+
+     .sqGameCardShell--question {
+       padding-top: 12px;
+     }
+
+     .sqGameOpt--tile {
+       padding: 12px 8px;
+       gap: 0;
+       border-radius: 12px;
+     }
+     .sqGameNavDot {
+       width: 34px;
+       height: 34px;
+       min-width: 34px;
+       font-size: 11px;
+     }
+     .sqDoneStatGrid { grid-template-columns: repeat(2, 1fr); }
+     .sqDoneCard { border-radius: var(--radius-lg); }
+     .sqDoneCardHead { padding: 24px 20px 20px; }
+     .sqDoneCardFoot { padding: 16px 20px; flex-direction: column; }
+     .sqDoneScoreNum { font-size: 52px; }
+     .sqSubmitConfirmCard {
+       padding: 24px 20px 18px;
+       border-radius: var(--radius-lg);
+     }
+     .sqSubmitConfirmActions { flex-direction: column; }
+   }
+
+   /* ── Shared: list / overview / results shell ─────────────── */
+   .sqPage {
+     font-family: var(--font);
+     background: var(--bg);
+     color: var(--ink);
+     min-height: calc(100dvh - 64px);
+     max-width: 1100px;
+     margin: 0 auto;
+     padding: 28px 22px 48px;
+     -webkit-font-smoothing: antialiased;
+   }
+
+   .sqBackLink {
+     display: inline-flex;
+     align-items: center;
+     gap: 6px;
+     margin-bottom: 20px;
+     font-size: 14px;
+     font-weight: 600;
+     color: var(--accent);
+     text-decoration: none;
+   }
+
+   .sqBackLink:hover {
+     text-decoration: underline;
+     color: #2450cc;
+   }
+
+   .sqSub {
+     margin: 0;
+     color: var(--ink-3);
+     font-size: 15px;
+     line-height: 1.5;
+   }
+
+   .sqErr {
+     color: var(--red);
+     font-size: 14px;
+     margin: 12px 0 0;
+     padding: 12px 14px;
+     background: var(--red-light);
+     border-radius: var(--radius-sm);
+     border: 1px solid #fecaca;
+   }
+
+   /* ── Results page ────────────────────────────────────────── */
+   .sqResultsPage {
+     max-width: 1024px;
+     padding-bottom: 56px;
+   }
+
+   .sqPage.sqResultsPage--full,
+   .sqResultsPage--full {
+     max-width: none;
+     width: 100%;
+     margin-left: 0;
+     margin-right: 0;
+     padding-left: clamp(16px, 3.5vw, 40px);
+     padding-right: clamp(16px, 3.5vw, 40px);
+   }
+
+   .sqResultsTop {
+     margin-bottom: 8px;
+   }
+
+   .sqResultsBack {
+     display: inline-flex;
+     align-items: center;
+     gap: 8px;
+     font-size: 14px;
+     font-weight: 600;
+     color: var(--ink-2);
+     text-decoration: none;
+     padding: 8px 0;
+     transition: color 0.15s;
+   }
+
+   .sqResultsBack:hover {
+     color: var(--accent);
+   }
+
+   .sqResultsLoading,
+   .sqResultsErr {
+     font-size: 15px;
+     color: var(--ink-3);
+     margin-top: 16px;
+   }
+
+   .sqResultsErr {
+     color: var(--red);
+     background: var(--red-light);
+     padding: 14px 16px;
+     border-radius: var(--radius-sm);
+     border: 1px solid #fecaca;
+   }
+
+   .sqResultsHero {
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius-lg);
+     padding: 24px 28px 28px;
+     box-shadow: var(--shadow-sm);
+   }
+
+   .sqResultsHeroInner {
+     display: grid;
+     grid-template-columns: minmax(0, 1fr) minmax(200px, 280px);
+     gap: 28px 40px;
+     align-items: start;
+   }
+
+   .sqResultsHeroMain {
+     min-width: 0;
+   }
+
+   .sqResultsHeroAside {
+     min-width: 0;
+     padding: 16px 18px;
+     border-radius: var(--radius);
+     background: var(--surface-2);
+     border: 1px solid var(--border);
+   }
+
+   .sqResultsAsideLabel {
+     margin: 0 0 12px;
+     font-size: 12px;
+     font-weight: 600;
+     color: var(--ink-3);
+     letter-spacing: 0.02em;
+   }
+
+   .sqResultsKicker {
+     font-size: 13px;
+     font-weight: 600;
+     letter-spacing: 0.02em;
+     text-transform: none;
+     color: var(--accent);
+     margin: 0 0 8px;
+   }
+
+   .sqResultsTitle {
+     margin: 0 0 16px;
+     font-size: clamp(1.35rem, 2.5vw, 1.65rem);
+     font-weight: 700;
+     letter-spacing: -0.02em;
+     color: var(--ink);
+     line-height: 1.25;
+   }
+
+   .sqResultsScoreBlock {
+     display: flex;
+     align-items: baseline;
+     gap: 4px;
+     margin-bottom: 6px;
+   }
+
+   .sqResultsScoreNum {
+     font-family: var(--mono);
+     font-size: clamp(2.6rem, 7vw, 3.35rem);
+     font-weight: 800;
+     line-height: 1;
+     letter-spacing: -0.04em;
+     color: var(--accent);
+   }
+
+   .sqResultsScorePct {
+     font-size: 1.5rem;
+     font-weight: 800;
+     color: var(--accent-dim);
+   }
+
+   .sqResultsPointsLine {
+     margin: 0 0 14px;
+     font-size: 15px;
+     color: var(--ink-2);
+   }
+
+   .sqResultsPointsLine strong {
+     color: var(--ink);
+     font-weight: 700;
+   }
+
+   .sqResultsPointsSep {
+     margin-left: 10px;
+     color: var(--ink-3);
+     font-weight: 500;
+   }
+
+   .sqResultsCoach {
+     margin: 0 0 20px;
+     font-size: 15px;
+     line-height: 1.6;
+     color: var(--ink-2);
+     max-width: none;
+   }
+
+   .sqResultsCtaRow {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: center;
+     gap: 10px 14px;
+   }
+
+   .sqResultsStatChips {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 10px;
+     margin-bottom: 0;
+   }
+
+   .sqResultsStatChips--aside {
+     flex-direction: column;
+     gap: 8px;
+   }
+
+   .sqResultsStatChips--aside .sqResultsChip {
+     flex: none;
+     min-width: 0;
+     padding: 10px 12px;
+   }
+
+   .sqResultsChip {
+     flex: 1 1 120px;
+     min-width: 100px;
+     padding: 12px 14px;
+     border-radius: var(--radius);
+     border: 1px solid var(--border);
+     background: var(--surface);
+     display: flex;
+     flex-direction: column;
+     gap: 4px;
+   }
+
+   .sqResultsChip--hero {
+     padding: 14px 14px;
+     border-width: 1.5px;
+   }
+
+   .sqResultsChip--heroTertiary .sqResultsChipVal {
+     font-size: 1.05rem;
+     font-weight: 700;
+     color: var(--ink-2);
+   }
+
+   .sqResultsChip--ok {
+     background: var(--green-light);
+     border-color: #86efac;
+   }
+
+   .sqResultsChip--bad {
+     background: var(--red-light);
+     border-color: #fecaca;
+   }
+
+   .sqResultsChip--neutral {
+     background: #fff7ed;
+     border-color: #fed7aa;
+   }
+
+   .sqResultsChip--time {
+     background: var(--surface);
+     border-color: var(--border);
+   }
+
+   .sqResultsChip--skippedMuted {
+     background: rgba(248, 250, 252, 0.9);
+     border-color: #e2e8f0;
+     padding: 8px 10px;
+   }
+
+   .sqResultsChip--skippedMuted .sqResultsChipLabel {
+     font-size: 10px;
+     color: #94a3b8;
+   }
+
+   .sqResultsChip--skippedMuted .sqResultsChipVal {
+     font-size: 1.1rem;
+     font-weight: 700;
+     color: var(--ink-3);
+   }
+
+   .sqResultsChipLabel {
+     font-size: 10px;
+     font-weight: 600;
+     letter-spacing: 0.04em;
+     text-transform: uppercase;
+     color: var(--ink-3);
+   }
+
+   .sqResultsChipVal {
+     font-size: 1.35rem;
+     font-weight: 800;
+     font-family: var(--mono);
+     color: var(--ink);
+   }
+
+   .sqResultsChipVal--mono {
+     font-size: 1.05rem;
+   }
+
+   .sqResultsChip--ok .sqResultsChipVal {
+     color: var(--green);
+   }
+
+   .sqResultsChip--bad .sqResultsChipVal {
+     color: var(--red);
+   }
+
+   .sqResultsPrimaryBtn {
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     padding: 11px 20px;
+     border-radius: var(--radius);
+     font-size: 14px;
+     font-weight: 700;
+     color: #fff;
+     background: var(--accent);
+     text-decoration: none;
+     box-shadow: 0 2px 10px rgba(45, 91, 227, 0.22);
+     transition: background 0.15s, transform 0.15s var(--ease-spring), box-shadow 0.15s;
+     border: none;
+     cursor: pointer;
+     font-family: inherit;
+   }
+
+   .sqResultsPrimaryBtn:disabled {
+     opacity: 0.75;
+     cursor: wait;
+     transform: none;
+   }
+
+   .sqResultsRetryErr {
+     margin: 0 0 10px;
+     font-size: 14px;
+     color: var(--red, #c0392b);
+     font-weight: 600;
+   }
+
+   .sqResultsPrimaryBtn:hover {
+     background: #2450cc;
+     transform: translateY(-1px);
+     box-shadow: 0 3px 14px rgba(45, 91, 227, 0.3);
+   }
+
+   .sqResultsSecondaryBtn {
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     padding: 10px 18px;
+     border-radius: var(--radius);
+     font-size: 14px;
+     font-weight: 600;
+     color: var(--ink-2);
+     background: var(--surface-2);
+     border: 1px solid var(--border);
+     text-decoration: none;
+     transition: background 0.15s, border-color 0.15s, color 0.15s;
+   }
+
+   .sqResultsSecondaryBtn:hover {
+     border-color: var(--accent-dim);
+     color: var(--accent);
+     background: #fff;
+   }
+
+   .sqResultsReview {
+     margin-top: 32px;
+   }
+
+   .sqResultsReviewToolbar {
+     display: flex;
+     align-items: flex-start;
+     justify-content: space-between;
+     gap: 16px 20px;
+     margin-bottom: 18px;
+     flex-wrap: wrap;
+   }
+
+   .sqResultsReviewHead {
+     margin-bottom: 0;
+     flex: 1 1 200px;
+     min-width: 0;
+   }
+
+   .sqResultsReviewTitle {
+     margin: 0 0 6px;
+     font-size: 1.1rem;
+     font-weight: 700;
+     letter-spacing: -0.02em;
+     color: var(--ink);
+   }
+
+   .sqResultsReviewHint {
+     margin: 0;
+     font-size: 14px;
+     color: var(--ink-3);
+     line-height: 1.45;
+     max-width: none;
+   }
+
+   .sqReviewFilters {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 8px;
+     margin-bottom: 0;
+     flex: 0 0 auto;
+     justify-content: flex-end;
+   }
+
+   @media (max-width: 640px) {
+     .sqResultsReviewToolbar {
+       flex-direction: column;
+     }
+     .sqReviewFilters {
+       width: 100%;
+       justify-content: flex-end;
+     }
+   }
+
+   .sqReviewFilterBtn {
+     font-family: var(--font);
+     display: inline-flex;
+     align-items: center;
+     gap: 8px;
+     padding: 8px 14px;
+     border-radius: 999px;
+     border: 1px solid var(--border);
+     background: var(--surface);
+     font-size: 13px;
+     font-weight: 600;
+     color: var(--ink-2);
+     cursor: pointer;
+     transition: border-color 0.15s, background 0.15s, color 0.15s;
+   }
+
+   .sqReviewFilterBtn:hover {
+     border-color: var(--accent-dim);
+     color: var(--accent);
+   }
+
+   .sqReviewFilterBtn.is-active {
+     background: var(--accent-light);
+     border-color: rgba(45, 91, 227, 0.35);
+     color: var(--accent);
+   }
+
+   .sqReviewFilterCount {
+     font-family: var(--mono);
+     font-size: 12px;
+     font-weight: 700;
+     opacity: 0.85;
+   }
+
+   .sqReviewEmpty {
+     margin: 0;
+     padding: 28px 20px;
+     text-align: center;
+     font-size: 14px;
+     color: var(--ink-3);
+     background: var(--surface-2);
+     border-radius: var(--radius);
+     border: 1px dashed var(--border);
+   }
+
+   .sqReviewCardList {
+     list-style: none;
+     margin: 0;
+     padding: 0;
+     display: flex;
+     flex-direction: column;
+     gap: 14px;
+   }
+
+   .sqReviewCard {
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius);
+     padding: 16px 18px;
+     box-shadow: var(--shadow-sm);
+   }
+
+   .sqReviewCard--correct {
+     box-shadow: inset 3px 0 0 0 var(--green), var(--shadow-sm);
+   }
+
+   .sqReviewCard--incorrect {
+     box-shadow: inset 3px 0 0 0 var(--red), var(--shadow-sm);
+   }
+
+   .sqReviewCard--skipped {
+     box-shadow: inset 3px 0 0 0 #cbd5e1, var(--shadow-sm);
+     background: rgba(248, 250, 252, 0.65);
+   }
+
+   .sqReviewCardTop {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: flex-start;
+     justify-content: space-between;
+     gap: 12px;
+     margin-bottom: 12px;
+   }
+
+   .sqReviewCardMeta {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: center;
+     gap: 10px 12px;
+   }
+
+   .sqReviewCardNum {
+     font-family: var(--mono);
+     font-size: 12px;
+     font-weight: 700;
+     letter-spacing: 0.04em;
+     color: var(--ink-3);
+     text-transform: uppercase;
+   }
+
+   .sqReviewStatus {
+     display: inline-flex;
+     align-items: center;
+     gap: 6px;
+     font-size: 13px;
+     font-weight: 700;
+   }
+
+   .sqReviewStatusIcon {
+     font-size: 14px;
+     line-height: 1;
+   }
+
+   .sqReviewStatus--correct {
+     color: var(--green);
+   }
+
+   .sqReviewStatus--incorrect {
+     color: var(--red);
+   }
+
+   .sqReviewStatus--skipped {
+     color: var(--ink-3);
+   }
+
+   .sqReviewCardToggle {
+     font-family: var(--font);
+     font-size: 13px;
+     font-weight: 600;
+     color: var(--accent);
+     background: transparent;
+     border: none;
+     padding: 4px 8px;
+     margin: -4px -8px 0 0;
+     cursor: pointer;
+     border-radius: var(--radius-sm);
+     transition: background 0.12s;
+   }
+
+   .sqReviewCardToggle:hover {
+     background: var(--accent-light);
+   }
+
+   .sqReviewCardMain {
+     display: grid;
+     grid-template-columns: minmax(0, 1fr) minmax(220px, 40%);
+     gap: 20px 28px;
+     align-items: start;
+   }
+
+   .sqReviewCardLeft {
+     min-width: 0;
+   }
+
+   .sqReviewCardAnswers {
+     min-width: 0;
+     justify-self: end;
+     width: 100%;
+     max-width: 420px;
+     padding-left: 20px;
+     border-left: 1px solid var(--border);
+   }
+
+   .sqReviewCardPrompt {
+     margin: 0 0 8px;
+     font-size: 15px;
+     font-weight: 500;
+     line-height: 1.5;
+     color: var(--ink);
+     white-space: pre-wrap;
+     word-break: break-word;
+   }
+
+   .sqReviewCardPoints {
+     margin: 0;
+     font-size: 13px;
+     color: var(--ink-2);
+   }
+
+   .sqReviewCardPoints strong {
+     font-family: var(--mono);
+     font-weight: 700;
+     color: var(--ink);
+   }
+
+   .sqReviewCardPointsSep {
+     color: var(--ink-3);
+     font-weight: 500;
+   }
+
+   .sqReviewCardCompare {
+     display: grid;
+     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+     gap: 12px 20px;
+     align-items: start;
+   }
+
+   .sqReviewCardSingle {
+     display: block;
+   }
+
+   @media (min-width: 821px) {
+     .sqReviewCardCompare > .sqReviewDetailBlock:first-child {
+       padding-right: 6px;
+     }
+     .sqReviewCardCompare > .sqReviewDetailBlock:nth-child(2) {
+       padding-left: 20px;
+       border-left: 1px solid var(--border);
+     }
+   }
+
+   .sqReviewDetailBlock {
+     margin: 0;
+   }
+
+   .sqReviewDetailHeading {
+     margin: 0 0 6px;
+     font-size: 11px;
+     font-weight: 700;
+     letter-spacing: 0.05em;
+     text-transform: uppercase;
+     color: var(--ink);
+   }
+
+   .sqReviewDetailBody {
+     margin: 0;
+     font-size: 14px;
+     line-height: 1.55;
+     color: var(--ink-2);
+     white-space: pre-wrap;
+     word-break: break-word;
+   }
+
+   /* Status colors on answer text only; headings stay black */
+   .sqReviewDetailBlock--yours.sqReviewDetailBlock--status-correct .sqReviewDetailBody {
+     color: #166534;
+     font-weight: 600;
+   }
+
+   .sqReviewDetailBlock--yours.sqReviewDetailBlock--status-incorrect .sqReviewDetailBody {
+     color: #991b1b;
+     font-weight: 600;
+   }
+
+   .sqReviewDetailBlock--yours.sqReviewDetailBlock--status-skipped .sqReviewDetailBody {
+     color: var(--ink-3);
+     font-weight: 500;
+   }
+
+   .sqReviewDetailBlock--key .sqReviewDetailBody {
+     color: #166534;
+     font-weight: 600;
+   }
+
+   .sqReviewMuted {
+     color: var(--ink-3);
+     font-style: italic;
+     font-weight: 500;
+   }
+
+   @media (max-width: 820px) {
+     .sqResultsHeroInner {
+       grid-template-columns: 1fr;
+     }
+
+     .sqReviewCardMain {
+       grid-template-columns: 1fr;
+     }
+
+     .sqReviewCardAnswers {
+       justify-self: stretch;
+       max-width: none;
+       padding-left: 0;
+       border-left: none;
+       border-top: 1px solid var(--border);
+       padding-top: 14px;
+       margin-top: 2px;
+     }
+
+     .sqReviewCardCompare {
+       grid-template-columns: 1fr;
+       gap: 14px;
+     }
+   }
+
+   @media (max-width: 640px) {
+     .sqResultsHero {
+       padding: 22px 18px 24px;
+     }
+
+     .sqResultsStatChips--aside {
+       flex-direction: column;
+     }
+
+     .sqResultsChip {
+       flex: 1 1 auto;
+     }
+
+     .sqPage {
+       padding: 20px 16px 40px;
+     }
+   }
+
+   /* ── Quiz overview (pre-attempt) ─────────────────────────── */
+   .sqOverviewPage {
+     max-width: 1080px;
+   }
+
+   /* Quiz overview — structured pre-attempt layout */
+   .sqOvPage.sqPage {
+     background: var(--bg);
+     max-width: 1180px;
+   }
+
+   .sqOvTop {
+     margin-bottom: 8px;
+   }
+
+   .sqOvHero {
+     margin-bottom: 32px;
+     padding: 32px 32px 28px;
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius-lg);
+     box-shadow: var(--shadow-sm);
+   }
+
+   .sqOvHeroTop {
+     margin-bottom: 12px;
+   }
+
+   .sqOvState {
+     display: inline-flex;
+     align-items: center;
+     padding: 6px 12px;
+     border-radius: 999px;
+     font-size: 11px;
+     font-weight: 700;
+     letter-spacing: 0.06em;
+     text-transform: uppercase;
+     border: 1px solid var(--border);
+     background: var(--surface-2);
+     color: var(--ink-2);
+   }
+
+   .sqOvState--not_started {
+     background: var(--surface-2);
+   }
+
+   .sqOvState--in_progress {
+     background: var(--accent-light);
+     color: var(--accent);
+     border-color: rgba(45, 91, 227, 0.2);
+   }
+
+   .sqOvState--completed {
+     background: var(--surface-2);
+   }
+
+   .sqOvState--retry_recommended {
+     background: var(--amber-light);
+     color: var(--amber);
+     border-color: rgba(217, 119, 6, 0.25);
+   }
+
+   .sqOvState--mastered {
+     background: var(--green-light);
+     color: var(--green);
+     border-color: rgba(22, 163, 74, 0.2);
+   }
+
+   .sqOvTitle {
+     margin: 0 0 12px;
+     font-size: clamp(1.65rem, 3.2vw, 2.5rem);
+     font-weight: 700;
+     letter-spacing: -0.03em;
+     line-height: 1.15;
+     color: var(--ink);
+   }
+
+   .sqOvSubtitle {
+     margin: 0 0 18px;
+     font-size: 17px;
+     line-height: 1.55;
+     color: var(--ink-2);
+     max-width: 62ch;
+     font-weight: 400;
+   }
+
+   .sqOvHeroPerf {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 28px 40px;
+     margin-bottom: 20px;
+   }
+
+   .sqOvHeroPerfItem {
+     display: flex;
+     flex-direction: column;
+     gap: 2px;
+   }
+
+   .sqOvHeroPerfLab {
+     font-size: 12px;
+     font-weight: 500;
+     color: var(--ink-3);
+     letter-spacing: 0.02em;
+   }
+
+   .sqOvHeroPerfVal {
+     font-size: 1.55rem;
+     font-weight: 700;
+     letter-spacing: -0.03em;
+     color: var(--ink);
+     font-family: var(--mono);
+     line-height: 1.1;
+   }
+
+   .sqOvHeroPerfVal--secondary {
+     font-size: 1.28rem;
+     font-weight: 600;
+     color: var(--ink-2);
+   }
+
+   .sqOvHeroSkills {
+     margin-bottom: 20px;
+   }
+
+   .sqOvHeroSkillsLab {
+     display: block;
+     font-size: 12px;
+     font-weight: 600;
+     color: var(--ink-3);
+     margin-bottom: 8px;
+   }
+
+   .sqOvHeroSkillTags {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 8px;
+   }
+
+   .sqOvHeroSkillTag {
+     display: inline-flex;
+     align-items: center;
+     padding: 6px 12px;
+     border-radius: 999px;
+     font-size: 13px;
+     font-weight: 500;
+     color: var(--ink-2);
+     background: var(--surface-2);
+   }
+
+   .sqOvMetaRow {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 8px 10px;
+     margin-bottom: 18px;
+   }
+
+   .sqOvMetaChip {
+     display: inline-flex;
+     align-items: center;
+     padding: 6px 12px;
+     border-radius: 999px;
+     font-size: 13px;
+     font-weight: 600;
+     color: var(--ink-2);
+     background: var(--surface-2);
+     border: 1px solid var(--border);
+   }
+
+   .sqOvMetaChip--quiet {
+     font-weight: 500;
+     color: var(--ink-3);
+     background: rgba(255, 255, 255, 0.6);
+   }
+
+   .sqOvHeroActions {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: flex-start;
+     gap: 20px 32px;
+     padding-top: 22px;
+     margin-top: 4px;
+     border-top: 1px solid var(--border);
+   }
+
+   .sqOvPrimaryBlock {
+     flex: 1 1 220px;
+     max-width: 380px;
+   }
+
+   .sqOvCtaHint {
+     margin: 10px 0 0;
+     font-size: 14px;
+     line-height: 1.5;
+     color: var(--ink-3);
+   }
+
+   .sqOvCtaHint--sticky {
+     margin-top: 8px;
+   }
+
+   .sqOvSecondaryActions {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 8px 12px;
+     align-items: center;
+   }
+
+   .sqOvBtnGhost {
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     padding: 10px 16px;
+     border-radius: var(--radius-sm);
+     font-size: 14px;
+     font-weight: 600;
+     color: var(--ink-2);
+     background: var(--surface);
+     border: 1px solid var(--border-strong);
+     text-decoration: none;
+     cursor: pointer;
+     transition:
+       background 0.15s,
+       border-color 0.15s,
+       color 0.15s,
+       box-shadow 0.15s;
+     font-family: var(--font);
+   }
+
+   .sqOvBtnGhost:hover:not(:disabled) {
+     background: var(--surface-2);
+     border-color: var(--accent-dim);
+     color: var(--accent);
+     box-shadow: var(--shadow-sm);
+   }
+
+   .sqOvBtnGhost:disabled {
+     opacity: 0.5;
+     cursor: not-allowed;
+   }
+
+   .sqOvBody {
+     display: grid;
+     grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+     gap: 32px;
+     align-items: start;
+   }
+
+   .sqOvMain {
+     display: flex;
+     flex-direction: column;
+     gap: 12px;
+     min-width: 0;
+   }
+
+   .sqOvPanel {
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius-lg);
+     box-shadow: var(--shadow-sm);
+     padding: 26px 28px 28px;
+   }
+
+   .sqOvPanelSection {
+     padding-top: 22px;
+     margin-top: 22px;
+     border-top: 1px solid var(--border);
+   }
+
+   .sqOvPanelSection:first-child {
+     padding-top: 0;
+     margin-top: 0;
+     border-top: none;
+   }
+
+   .sqOvPanelHeading {
+     margin: 0 0 12px;
+     font-size: 12px;
+     font-weight: 700;
+     letter-spacing: 0.07em;
+     text-transform: uppercase;
+     color: var(--ink-3);
+   }
+
+   .sqOvOutcomes--tight {
+     font-size: 15px;
+     line-height: 1.6;
+   }
+
+   .sqOvGlance {
+     margin: 0;
+     font-size: 15px;
+     line-height: 1.65;
+     color: var(--ink-2);
+     font-weight: 400;
+   }
+
+   .sqOvGlanceSep {
+     color: var(--border-strong);
+     margin: 0 5px;
+   }
+
+   .sqOvRulesBrief {
+     margin: 0;
+     padding-left: 18px;
+     font-size: 15px;
+     line-height: 1.55;
+     color: var(--ink-2);
+     font-weight: 400;
+   }
+
+   .sqOvRulesBrief li {
+     margin-bottom: 6px;
+   }
+
+   .sqOvRulesBrief li:last-child {
+     margin-bottom: 0;
+   }
+
+   .sqOvInlineNote {
+     margin: 16px 0 0;
+     padding: 12px 14px;
+     border-radius: var(--radius-sm);
+     font-size: 14px;
+     line-height: 1.5;
+     color: var(--ink-2);
+     background: rgba(254, 243, 199, 0.42);
+   }
+
+   .sqOvCard {
+     padding: 24px 28px;
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius-lg);
+     box-shadow: var(--shadow-sm);
+   }
+
+   .sqOvSectionTitle {
+     margin: 0 0 16px;
+     font-size: clamp(1.1rem, 2vw, 1.35rem);
+     font-weight: 600;
+     letter-spacing: -0.02em;
+     color: var(--ink);
+   }
+
+   .sqOvLead {
+     margin: 0 0 20px;
+     font-size: 15px;
+     line-height: 1.65;
+     color: var(--ink-2);
+   }
+
+   .sqOvSubhead {
+     margin: 0 0 10px;
+     font-size: 15px;
+     font-weight: 600;
+     color: var(--ink);
+   }
+
+   .sqOvOutcomes {
+     margin: 0;
+     padding-left: 20px;
+     font-size: 15px;
+     line-height: 1.6;
+     color: var(--ink-2);
+   }
+
+   .sqOvOutcomes li {
+     margin-bottom: 8px;
+   }
+
+   .sqOvOutcomes li:last-child {
+     margin-bottom: 0;
+   }
+
+   .sqOvFormat {
+     margin: 0;
+     display: grid;
+     gap: 0;
+   }
+
+   .sqOvFormatRow {
+     display: grid;
+     grid-template-columns: minmax(120px, 160px) 1fr;
+     gap: 16px 24px;
+     padding: 12px 0;
+     border-bottom: 1px solid var(--border);
+     font-size: 15px;
+   }
+
+   .sqOvFormatRow:last-child {
+     border-bottom: none;
+     padding-bottom: 0;
+   }
+
+   .sqOvFormatRow:first-child {
+     padding-top: 0;
+   }
+
+   .sqOvFormatRow dt {
+     margin: 0;
+     font-weight: 600;
+     color: var(--ink-3);
+   }
+
+   .sqOvFormatRow dd {
+     margin: 0;
+     color: var(--ink-2);
+     line-height: 1.45;
+   }
+
+   .sqOvRulesCompact {
+     font-size: 15px;
+   }
+
+   .sqOvRulesCompact li {
+     margin-bottom: 8px;
+   }
+
+   .sqOvTags {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 8px;
+   }
+
+   .sqOvTag {
+     display: inline-flex;
+     align-items: center;
+     padding: 6px 12px;
+     border-radius: 999px;
+     font-size: 13px;
+     font-weight: 600;
+     color: var(--ink-2);
+     background: var(--surface-2);
+     border: 1px solid var(--border);
+   }
+
+   .sqOvSuggest {
+     margin: 16px 0 0;
+     padding: 14px 16px;
+     border-radius: var(--radius-sm);
+     font-size: 14px;
+     line-height: 1.55;
+     color: var(--ink-2);
+     background: rgba(254, 243, 199, 0.55);
+     border: 1px solid rgba(217, 119, 6, 0.22);
+   }
+
+   .sqOvMetaNote {
+     margin: 20px 0 0;
+     background: rgba(248, 250, 252, 0.9);
+     border: 1px solid var(--border);
+   }
+
+   .sqOvAside {
+     padding: 22px;
+     padding-bottom: 24px;
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius-lg);
+     box-shadow: var(--shadow-sm);
+     align-self: start;
+   }
+
+   .sqOvAsideHead {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     gap: 14px;
+     margin-bottom: 14px;
+   }
+
+   .sqOvAsideHead .sqOvAsideTitle {
+     margin: 0;
+     font-size: 15px;
+     font-weight: 700;
+     letter-spacing: -0.02em;
+     color: var(--ink);
+   }
+
+   .sqOvRingWrap {
+     position: relative;
+     width: 108px;
+     height: 108px;
+     flex-shrink: 0;
+   }
+
+   .sqOvRingWrap--compact {
+     width: 92px;
+     height: 92px;
+   }
+
+   .sqOvRingWrap--compact .sqOvRingPct {
+     font-size: 1.15rem;
+   }
+
+   .sqOvRingWrap--compact .sqOvRingLbl {
+     font-size: 9px;
+   }
+
+   .sqOvRingSvg {
+     display: block;
+   }
+
+   .sqOvRingTrack {
+     stroke: var(--border-strong);
+   }
+
+   .sqOvRingArc {
+     stroke: var(--accent);
+     transition: stroke-dashoffset 0.35s var(--ease-out);
+   }
+
+   .sqOvRingCenter {
+     position: absolute;
+     inset: 0;
+     display: flex;
+     flex-direction: column;
+     align-items: center;
+     justify-content: center;
+     text-align: center;
+     padding: 8px;
+   }
+
+   .sqOvRingPct {
+     font-size: 1.35rem;
+     font-weight: 800;
+     letter-spacing: -0.03em;
+     color: var(--ink);
+     line-height: 1;
+   }
+
+   .sqOvRingLbl {
+     margin-top: 4px;
+     font-size: 10px;
+     font-weight: 700;
+     letter-spacing: 0.06em;
+     text-transform: uppercase;
+     color: var(--ink-3);
+   }
+
+   .sqOvResumeLine {
+     margin: 0 0 12px;
+     font-size: 14px;
+     font-weight: 600;
+     line-height: 1.45;
+     color: var(--ink);
+     text-align: left;
+   }
+
+   .sqOvStatStack {
+     margin: 0;
+   }
+
+   .sqOvStatRow {
+     display: flex;
+     align-items: baseline;
+     justify-content: space-between;
+     gap: 12px;
+     padding: 9px 0;
+     border-bottom: 1px solid var(--border);
+     font-size: 14px;
+   }
+
+   .sqOvStatRow:last-child {
+     border-bottom: none;
+   }
+
+   .sqOvStatRow dt {
+     margin: 0;
+     color: var(--ink-3);
+     font-weight: 500;
+   }
+
+   .sqOvStatRow dd {
+     margin: 0;
+     font-family: var(--mono);
+     font-weight: 700;
+     color: var(--ink);
+     letter-spacing: -0.02em;
+   }
+
+   .sqOvStatVal--muted {
+     color: var(--ink-3) !important;
+     font-weight: 600;
+   }
+
+   .sqOvStatRow--trend dd {
+     font-family: var(--font);
+     font-weight: 700;
+     font-size: 13px;
+   }
+
+   .sqOvNarrative {
+     margin: 0 0 12px;
+     font-size: 14px;
+     line-height: 1.55;
+     color: var(--ink-2);
+     text-align: center;
+   }
+
+   .sqOvNarrative--compact {
+     margin-bottom: 16px;
+     font-size: 13px;
+     color: var(--ink-3);
+   }
+
+   .sqOvTrendUp {
+     color: var(--green);
+   }
+
+   .sqOvTrendDown {
+     color: var(--red);
+   }
+
+   .sqOvSummary {
+     margin-top: 4px;
+   }
+
+   .sqOvHistory {
+     margin-top: 20px;
+   }
+
+   .sqOvHistoryTitle {
+     margin: 0 0 10px;
+     font-size: 12px;
+     font-weight: 700;
+     letter-spacing: 0.08em;
+     text-transform: uppercase;
+     color: var(--ink-3);
+   }
+
+   .sqOvHistoryList {
+     list-style: none;
+     margin: 0;
+     padding: 0;
+   }
+
+   .sqOvHistoryList--plain {
+     border: none;
+     border-radius: 0;
+     background: transparent;
+   }
+
+   .sqOvHistoryList--plain .sqOvHistoryItem {
+     border-bottom: 1px solid var(--border);
+   }
+
+   .sqOvHistoryList--plain .sqOvHistoryItem:last-child {
+     border-bottom: none;
+   }
+
+   .sqOvFootNote {
+     margin: 14px 0 0;
+     font-size: 12px;
+     line-height: 1.45;
+     color: var(--ink-3);
+   }
+
+   .sqOvHistoryItem {
+     display: flex;
+     align-items: stretch;
+     border-bottom: 1px solid var(--border);
+     font-size: 14px;
+   }
+
+   .sqOvHistoryLink {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     gap: 12px;
+     flex: 1;
+     padding: 10px 14px;
+     text-decoration: none;
+     color: inherit;
+     transition: background 0.12s;
+   }
+
+   .sqOvHistoryLink:hover {
+     background: rgba(45, 91, 227, 0.06);
+   }
+
+   .sqOvHistoryLink:focus-visible {
+     outline: 2px solid var(--accent);
+     outline-offset: -2px;
+   }
+
+   .sqOvHistoryItem:last-child {
+     border-bottom: none;
+   }
+
+   .sqOvHistoryLabel {
+     color: var(--ink-2);
+     font-weight: 500;
+   }
+
+   .sqOvHistoryVal {
+     font-family: var(--mono);
+     font-weight: 700;
+     color: var(--ink);
+   }
+
+   .sqOvStickyCta {
+     display: none;
+     margin-top: 24px;
+     padding-top: 20px;
+     border-top: 1px solid var(--border);
+   }
+
+   @media (min-width: 901px) {
+     .sqOvStickyCta {
+       display: block;
+       /* keep in document flow — sticky+bottom was overlapping the stats card */
+       position: static;
+     }
+   }
+
+   .sqSummaryValue--neutral {
+     color: var(--ink-2) !important;
+     font-weight: 700;
+   }
+
+   @media (max-width: 900px) {
+     .sqOvBody {
+       grid-template-columns: 1fr;
+       gap: 24px;
+     }
+
+     .sqOvAside {
+       order: -1;
+     }
+
+     .sqOvHero {
+       padding: 24px 20px 22px;
+     }
+
+     .sqOvPanel {
+       padding: 20px 18px 22px;
+     }
+
+     .sqOvCard {
+       padding: 20px 18px;
+     }
+
+     .sqOvAside {
+       padding: 20px 18px 24px;
+     }
+
+     .sqOvFormatRow {
+       grid-template-columns: 1fr;
+       gap: 4px;
+     }
+   }
+
+   .sqOverviewTop {
+     margin-bottom: 4px;
+   }
+
+   .sqOverviewHeader {
+     margin-bottom: 28px;
+   }
+
+   .sqOverviewEyebrow {
+     margin: 0 0 10px;
+     font-size: 13px;
+     font-weight: 600;
+     letter-spacing: 0.02em;
+     text-transform: none;
+     color: var(--accent);
+   }
+
+   .sqOverviewTitleRow {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: center;
+     gap: 12px 16px;
+   }
+
+   .sqOverviewTitle {
+     margin: 0 0 8px;
+     font-size: clamp(1.55rem, 3vw, 1.95rem);
+     font-weight: 800;
+     letter-spacing: -0.03em;
+     color: var(--ink);
+     line-height: 1.18;
+   }
+
+   .sqOverviewIdentity {
+     margin: 0;
+     font-size: 14px;
+     font-weight: 500;
+     line-height: 1.45;
+     color: var(--ink-3);
+     max-width: 52ch;
+   }
+
+   .sqPill {
+     display: inline-flex;
+     align-items: center;
+     padding: 6px 14px;
+     border-radius: 999px;
+     font-size: 13px;
+     font-weight: 600;
+     color: var(--ink-2);
+     background: var(--surface);
+     border: 1px solid var(--border);
+   }
+
+   .sqOverviewGrid {
+     display: grid;
+     grid-template-columns: minmax(0, 1fr) minmax(240px, 312px);
+     gap: 24px;
+     align-items: start;
+   }
+
+   @media (max-width: 900px) {
+     .sqOverviewGrid {
+       grid-template-columns: 1fr;
+     }
+   }
+
+   .sqPanel {
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius-lg);
+     padding: 26px 28px 28px;
+     box-shadow: var(--shadow-sm);
+   }
+
+   .sqPanel--main {
+     position: relative;
+     overflow: hidden;
+   }
+
+   .sqPanel--main::before {
+     content: '';
+     position: absolute;
+     top: 0;
+     left: 0;
+     right: 0;
+     height: 3px;
+     background: linear-gradient(90deg, var(--accent), #7c9ff7);
+   }
+
+   .sqPanel--stats {
+     box-shadow: var(--shadow-sm);
+   }
+
+   .sqPrepBlock {
+     margin-bottom: 28px;
+   }
+
+   .sqPrepBlock:last-of-type {
+     margin-bottom: 24px;
+   }
+
+   .sqSectionHeading {
+     margin: 0 0 12px;
+     font-size: 16px;
+     font-weight: 600;
+     letter-spacing: -0.02em;
+     text-transform: none;
+     color: var(--ink);
+   }
+
+   .sqOverviewDescription {
+     margin: 0;
+     font-size: 15px;
+     line-height: 1.65;
+     color: var(--ink-2);
+   }
+
+   .sqRules {
+     margin: 0;
+     padding-left: 20px;
+     color: var(--ink-2);
+     font-size: 14px;
+     line-height: 1.65;
+   }
+
+   .sqRules strong {
+     font-weight: 700;
+     color: var(--ink);
+   }
+
+   .sqRules li {
+     margin-bottom: 10px;
+   }
+
+   .sqRules li:last-child {
+     margin-bottom: 0;
+   }
+
+   .sqHintBox {
+     margin-top: 28px;
+     padding: 16px 18px;
+     border-radius: var(--radius);
+     border: 1px solid rgba(203, 213, 225, 0.85);
+     background: rgba(232, 238, 251, 0.45);
+   }
+
+   .sqHintBox--timing {
+     background: rgba(248, 250, 252, 0.95);
+   }
+
+   .sqHintTitle {
+     font-size: 14px;
+     font-weight: 600;
+     letter-spacing: -0.01em;
+     text-transform: none;
+     color: var(--ink);
+     margin-bottom: 6px;
+   }
+
+   .sqHintText {
+     margin: 0;
+     font-size: 14px;
+     line-height: 1.55;
+     color: var(--ink-2);
+   }
+
+   .sqProgressNarrative {
+     margin: 0 0 18px;
+     font-size: 14px;
+     line-height: 1.55;
+     color: var(--ink-2);
+   }
+
+   .sqProgressNarrative--muted {
+     color: var(--ink-3);
+   }
+
+   .sqSummaryList {
+     border: 1px solid var(--border);
+     border-radius: var(--radius-sm);
+     background: var(--surface-2);
+     padding: 4px 0;
+     margin-bottom: 16px;
+   }
+
+   .sqSummaryRow {
+     display: flex;
+     align-items: baseline;
+     justify-content: space-between;
+     gap: 16px;
+     padding: 11px 16px;
+     border-bottom: 1px solid var(--border);
+   }
+
+   .sqSummaryRow:last-child {
+     border-bottom: none;
+   }
+
+   .sqSummaryLabel {
+     font-size: 14px;
+     font-weight: 500;
+     color: var(--ink-2);
+   }
+
+   .sqSummaryValue {
+     font-family: var(--mono);
+     font-size: 15px;
+     font-weight: 700;
+     letter-spacing: -0.02em;
+     color: var(--ink);
+     text-align: right;
+   }
+
+   .sqSummaryValue--last {
+     color: var(--accent);
+   }
+
+   .sqSummaryValue--best {
+     color: var(--green);
+   }
+
+   .sqSummaryRow--last .sqSummaryLabel,
+   .sqSummaryRow--best .sqSummaryLabel {
+     font-weight: 600;
+     color: var(--ink);
+   }
+
+   .sqMetaNote {
+     margin: 18px 0 16px;
+     font-size: 13px;
+     line-height: 1.5;
+     color: var(--ink-3);
+     padding: 12px 14px;
+     border-radius: var(--radius-sm);
+     background: rgba(0, 0, 0, 0.03);
+   }
+
+   .sqBtnPrimary--overview {
+     padding: 12px 20px;
+     font-size: 14px;
+     font-weight: 700;
+     box-shadow: 0 2px 10px rgba(45, 91, 227, 0.22);
+   }
+
+   .sqBtnPrimary--overview:hover:not(:disabled) {
+     box-shadow: 0 3px 14px rgba(45, 91, 227, 0.28);
+     transform: translateY(-1px);
+   }
+
+   .sqBtnPrimary--overview:disabled {
+     box-shadow: none;
+   }
+
+   .sqBtn {
+     font-family: var(--font);
+     display: flex;
+     width: 100%;
+     align-items: center;
+     justify-content: center;
+     padding: 15px 22px;
+     font-size: 15px;
+     font-weight: 700;
+     border-radius: var(--radius);
+     border: none;
+     cursor: pointer;
+     transition: background 0.15s, transform 0.15s var(--ease-spring), box-shadow 0.15s, opacity 0.15s;
+   }
+
+   .sqBtnPrimary {
+     color: #fff;
+     background: var(--accent);
+     box-shadow: 0 6px 22px rgba(45, 91, 227, 0.35);
+   }
+
+   .sqBtnPrimary:hover:not(:disabled) {
+     background: #2450cc;
+     transform: translateY(-1px);
+     box-shadow: 0 8px 28px rgba(45, 91, 227, 0.4);
+   }
+
+   .sqBtnPrimary:disabled {
+     opacity: 0.5;
+     cursor: not-allowed;
+     transform: none;
+     box-shadow: none;
+   }
+
+   .sqErr--compact {
+     margin-top: 16px;
+   }
+
+   .sqOverviewLoading,
+   .sqOverviewErr {
+     font-size: 15px;
+     color: var(--ink-3);
+     margin-top: 12px;
+   }
+
+   .sqOverviewErr {
+     color: var(--red);
+     background: var(--red-light);
+     padding: 14px 16px;
+     border-radius: var(--radius-sm);
+     border: 1px solid #fecaca;
+   }
+
+   /* ── Quiz list ───────────────────────────────────────────── */
+   .sqVisuallyHidden {
+     position: absolute;
+     width: 1px;
+     height: 1px;
+     padding: 0;
+     margin: -1px;
+     overflow: hidden;
+     clip: rect(0, 0, 0, 0);
+     white-space: nowrap;
+     border: 0;
+   }
+
+   /* Quiz list — spacing scale (section / card / micro) */
+   .sqListPage {
+     --sq-space-xs: 6px;
+     --sq-space-sm: 12px;
+     --sq-space-md: 16px;
+     --sq-space-lg: 24px;
+     --sq-space-xl: 32px;
+     --sq-space-section: 48px;
+     --sq-card-pad-x: 22px;
+     --sq-card-pad-y: 18px;
+     --sq-card-inner-gap: 12px;
+     max-width: 1240px;
+     padding-bottom: 56px;
+   }
+
+   .sqPage.sqListPage {
+     padding: var(--sq-space-lg) clamp(var(--sq-space-md), 3vw, 28px) var(--sq-space-section);
+   }
+
+   .sqListHeader {
+     margin-bottom: var(--sq-space-sm);
+   }
+
+   .sqListHeader--compact {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: center;
+     justify-content: space-between;
+     gap: var(--sq-space-md) var(--sq-space-lg);
+     margin-bottom: var(--sq-space-xl);
+   }
+
+   .sqListHeaderMain {
+     flex: 1 1 260px;
+     min-width: 0;
+   }
+
+   .sqListSearchInline {
+     flex: 1 1 260px;
+     max-width: 360px;
+   }
+
+   .sqSearchField {
+     position: relative;
+     width: 100%;
+   }
+
+   .sqSearchFieldIcon {
+     position: absolute;
+     left: 12px;
+     top: 50%;
+     transform: translateY(-50%);
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     color: var(--ink-3);
+     pointer-events: none;
+   }
+
+   .sqSearchField--header .sqSearch--header {
+     width: 100%;
+     max-width: none;
+     margin: 0;
+     min-height: 0;
+     height: 40px;
+     padding: 0 14px 0 40px;
+     font-size: 14px;
+     border-radius: 10px;
+     border: 1px solid transparent;
+     background: #f4f6f9;
+     box-shadow: none;
+   }
+
+   .sqSearchField--header .sqSearch--header:focus {
+     outline: none;
+     border-color: rgba(148, 163, 184, 0.55);
+     background: #fff;
+     box-shadow: 0 0 0 3px rgba(45, 91, 227, 0.08);
+   }
+
+   .sqSearch--header {
+     max-width: none;
+     width: 100%;
+     margin: 0;
+   }
+
+   .sqListEyebrow {
+     margin: 0 0 8px;
+     font-size: 11px;
+     font-weight: 700;
+     letter-spacing: 0.12em;
+     text-transform: uppercase;
+     color: var(--accent);
+   }
+
+   .sqListTitle {
+     margin: 0 0 var(--sq-space-xs);
+     font-size: clamp(1.45rem, 2.85vw, 1.85rem);
+     font-weight: 700;
+     letter-spacing: -0.03em;
+     color: var(--ink);
+     line-height: 1.15;
+   }
+
+   .sqListLead {
+     margin: 0;
+     max-width: 52ch;
+     font-size: 14px;
+     line-height: 1.55;
+     color: var(--ink-3);
+     font-weight: 400;
+   }
+
+   .sqSearchWrap {
+     margin: 20px 0 28px;
+   }
+
+   .sqSearchLabel {
+     display: block;
+     font-size: 12px;
+     font-weight: 700;
+     color: var(--ink-2);
+     margin-bottom: 8px;
+     letter-spacing: 0.02em;
+   }
+
+   .sqToolbar {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 12px;
+     margin: 20px 0 24px;
+     align-items: center;
+   }
+
+   .sqSearch {
+     width: 100%;
+     max-width: 420px;
+     padding: 14px 18px;
+     font-family: var(--font);
+     font-size: 15px;
+     color: var(--ink);
+     background: var(--surface);
+     border: 1px solid var(--border);
+     border-radius: var(--radius);
+     outline: none;
+     transition: border-color 0.15s, box-shadow 0.15s;
+     box-shadow: var(--shadow-sm);
+   }
+
+   .sqSearch:focus {
+     border-color: var(--accent);
+     box-shadow: 0 0 0 3px rgba(45, 91, 227, 0.12);
+   }
+
+   .sqSearch::placeholder {
+     color: var(--ink-3);
+   }
+
+   .sqListLoading {
+     display: flex;
+     align-items: center;
+     gap: 10px;
+     margin: 8px 0 20px;
+     font-size: 14px;
+     font-weight: 600;
+     color: var(--ink-3);
+   }
+
+   .sqListLoadingDot {
+     width: 6px;
+     height: 6px;
+     border-radius: 50%;
+     background: var(--accent);
+     opacity: 0.35;
+     animation: sqDotPulse 1s ease-in-out infinite;
+   }
+
+   .sqListLoadingDot:nth-child(2) {
+     animation-delay: 0.15s;
+   }
+
+   .sqListLoadingDot:nth-child(3) {
+     animation-delay: 0.3s;
+   }
+
+   @keyframes sqDotPulse {
+     0%,
+     100% {
+       opacity: 0.35;
+       transform: scale(1);
+     }
+     50% {
+       opacity: 1;
+       transform: scale(1.15);
+     }
+   }
+
+   .sqSection {
+     margin-bottom: var(--sq-space-section);
+   }
+
+   .sqSection:last-of-type {
+     margin-bottom: var(--sq-space-lg);
+   }
+
+   .sqSectionHeader {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: flex-end;
+     justify-content: space-between;
+     gap: var(--sq-space-sm) var(--sq-space-md);
+     margin-bottom: var(--sq-space-md);
+     padding-bottom: var(--sq-space-sm);
+     border-bottom: none;
+     box-shadow: 0 1px 0 rgba(226, 232, 240, 0.9);
+   }
+
+   .sqSectionHeader--quiet {
+     box-shadow: 0 1px 0 rgba(241, 245, 249, 0.95);
+   }
+
+   .sqSectionTitle {
+     margin: 0 0 4px;
+     font-size: 1.08rem;
+     font-weight: 600;
+     color: var(--ink);
+     letter-spacing: -0.02em;
+   }
+
+   .sqSectionSub {
+     margin: 0;
+     font-size: 13px;
+     color: var(--ink-3);
+     line-height: 1.45;
+     max-width: 52ch;
+     font-weight: 400;
+   }
+
+   .sqSectionCount {
+     font-size: 12px;
+     font-weight: 500;
+     color: #94a3b8;
+     letter-spacing: 0.02em;
+   }
+
+   .sqModuleBlock {
+     margin-bottom: var(--sq-space-lg);
+   }
+
+   .sqModuleBlock:last-child {
+     margin-bottom: 0;
+   }
+
+   .sqModuleSubtitle {
+     margin: 0 0 var(--sq-space-sm);
+     font-size: 11px;
+     font-weight: 600;
+     letter-spacing: 0.08em;
+     text-transform: uppercase;
+     color: #94a3b8;
+   }
+
+   .sqGrid {
+     display: grid;
+     gap: var(--sq-space-md);
+     grid-template-columns: 1fr;
+     align-items: stretch;
+   }
+
+   @media (min-width: 720px) {
+     .sqGrid {
+       grid-template-columns: repeat(2, 1fr);
+     }
+   }
+
+   @media (min-width: 1080px) {
+     .sqGrid {
+       grid-template-columns: repeat(3, 1fr);
+     }
+   }
+
+   .sqCard {
+     position: relative;
+     display: flex;
+     flex-direction: column;
+     align-items: stretch;
+     width: 100%;
+     min-height: 0;
+     text-align: left;
+     cursor: pointer;
+     font-family: var(--font);
+     background: var(--surface);
+     border: 1px solid rgba(241, 245, 249, 0.9);
+     border-radius: var(--radius-lg);
+     padding: 0;
+     overflow: hidden;
+     transition:
+       border-color 0.22s ease,
+       box-shadow 0.22s ease,
+       transform 0.22s var(--ease-out);
+     box-shadow:
+       0 1px 0 rgba(15, 23, 42, 0.04),
+       0 12px 28px rgba(15, 23, 42, 0.05);
+   }
+
+   .sqCard--workflow {
+     min-height: 0;
+   }
+
+   .sqCard--workflow:hover:not(:disabled) {
+     transform: translateY(-1px);
+   }
+
+   .sqCardStatusBadge {
+     position: absolute;
+     top: 12px;
+     right: 12px;
+     z-index: 2;
+     max-width: min(108px, 42%);
+     padding: 3px 9px;
+     border-radius: 999px;
+     font-size: 9px;
+     font-weight: 500;
+     letter-spacing: 0.06em;
+     text-transform: uppercase;
+     line-height: 1.35;
+     white-space: nowrap;
+     overflow: hidden;
+     text-overflow: ellipsis;
+     border: none;
+   }
+
+   .sqCardStatusBadge--mastered {
+     color: var(--sq-master-fg);
+     background: var(--sq-master-bg);
+   }
+
+   .sqCardStatusBadge--retry {
+     color: var(--sq-retry-fg);
+     background: var(--sq-retry-bg);
+   }
+
+   .sqCard:disabled {
+     opacity: 0.72;
+     cursor: wait;
+     transform: none;
+   }
+
+   .sqCard::before {
+     content: '';
+     position: absolute;
+     top: 0;
+     left: 0;
+     right: 0;
+     height: 2px;
+     background: var(--accent);
+     opacity: 0;
+     transition: opacity 0.2s;
+   }
+
+   .sqCard--workflow::before {
+     display: none;
+   }
+
+   .sqCard:hover:not(:disabled) {
+     border-color: rgba(226, 232, 240, 0.95);
+     box-shadow:
+       0 1px 0 rgba(15, 23, 42, 0.05),
+       0 16px 36px rgba(15, 23, 42, 0.07);
+   }
+
+   .sqCard:hover::before {
+     opacity: 1;
+   }
+
+   .sqCard--workflow:hover::before {
+     opacity: 0;
+   }
+
+   .sqCard:focus {
+     outline: none;
+   }
+
+   .sqCard:focus-visible {
+     box-shadow:
+       0 1px 0 rgba(15, 23, 42, 0.04),
+       0 12px 28px rgba(15, 23, 42, 0.05),
+       0 0 0 3px rgba(45, 91, 227, 0.18);
+   }
+
+   .sqCardBody {
+     flex: 1;
+     display: flex;
+     flex-direction: column;
+     padding: var(--sq-card-pad-y, 18px) var(--sq-card-pad-x, 22px) calc(var(--sq-card-pad-y, 18px) - 2px);
+     gap: var(--sq-card-inner-gap, 12px);
+     min-width: 0;
+   }
+
+   .sqCard--workflow .sqCardBody {
+     padding-top: calc(var(--sq-card-pad-y, 18px) + 2px);
+   }
+
+   .sqCardModuleRow {
+     margin: 0;
+     padding-right: 0;
+   }
+
+   .sqCard--hasBadge .sqCardModuleRow {
+     padding-right: 96px;
+   }
+
+   .sqCardModuleHint {
+     font-size: 11px;
+     font-weight: 500;
+     color: #94a3b8;
+     letter-spacing: 0.02em;
+   }
+
+   .sqCardKicker {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     gap: 10px;
+     margin-bottom: 10px;
+   }
+
+   .sqCardKicker--onlyBadge {
+     justify-content: flex-end;
+   }
+
+   .sqCardKickerLabel {
+     font-size: 11px;
+     font-weight: 700;
+     letter-spacing: 0.07em;
+     text-transform: uppercase;
+     color: var(--ink-3);
+   }
+
+   .sqBadge {
+     flex-shrink: 0;
+     font-size: 10px;
+     font-weight: 800;
+     letter-spacing: 0.06em;
+     text-transform: uppercase;
+     color: var(--accent);
+     background: var(--accent-light);
+     padding: 5px 10px;
+     border-radius: 999px;
+     border: 1px solid rgba(45, 91, 227, 0.22);
+   }
+
+   .sqCardTitle {
+     font-size: 1.02rem;
+     font-weight: 600;
+     color: #0f172a;
+     margin: 0;
+     padding-right: 0;
+     line-height: 1.28;
+     letter-spacing: -0.02em;
+     display: -webkit-box;
+     -webkit-line-clamp: 2;
+     line-clamp: 2;
+     -webkit-box-orient: vertical;
+     overflow: hidden;
+   }
+
+   .sqCard--hasBadge .sqCardTitle {
+     padding-right: 96px;
+   }
+
+   /* One-line description slot so cards share vertical rhythm */
+   .sqCardDescSlot {
+     min-height: 1.36em;
+     line-height: 1.36;
+   }
+
+   .sqCardDesc {
+     margin: 0;
+     font-size: 12px;
+     line-height: 1.36;
+     color: #64748b;
+     font-weight: 400;
+     display: -webkit-box;
+     -webkit-line-clamp: 1;
+     line-clamp: 1;
+     -webkit-box-orient: vertical;
+     overflow: hidden;
+     min-height: 0;
+   }
+
+   .sqCardMetaLine {
+     margin: 0;
+     font-size: 12px;
+     font-weight: 400;
+     color: #94a3b8;
+     line-height: 1.4;
+   }
+
+   /* Progress + stats vs idle — stable band for grid scan */
+   .sqCardMid {
+     display: flex;
+     flex-direction: column;
+     gap: var(--sq-space-sm, 12px);
+     min-height: 5.5rem;
+     flex: 0 0 auto;
+     justify-content: flex-start;
+   }
+
+   .sqCardMid--idle {
+     justify-content: center;
+   }
+
+   .sqCardProgressWrap {
+     display: flex;
+     flex-direction: column;
+     gap: var(--sq-space-xs, 6px);
+     width: 100%;
+   }
+
+   .sqCardProgressLabel {
+     font-size: 10px;
+     font-weight: 500;
+     letter-spacing: 0.04em;
+     text-transform: none;
+     color: #94a3b8;
+   }
+
+   .sqCardProgressTrack {
+     height: 3px;
+     border-radius: 999px;
+     background: #eef2f6;
+     overflow: hidden;
+     margin: 0;
+   }
+
+   .sqCardProgressTrack--inline {
+     border: none;
+   }
+
+   .sqCardProgressFill {
+     height: 100%;
+     border-radius: inherit;
+     transition: width 0.45s var(--ease-out);
+   }
+
+   .sqCardProgressFill--accent {
+     background: #8b9dc0;
+     opacity: 1;
+   }
+
+   .sqCardStatGrid {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: flex-start;
+     gap: 2px 14px;
+     width: 100%;
+     margin: 0;
+   }
+
+   .sqCardStatCell {
+     display: flex;
+     flex-direction: column;
+     gap: 2px;
+     flex: 0 1 auto;
+     min-width: 0;
+     padding-right: 4px;
+   }
+
+   .sqCardStatLab {
+     font-size: 10px;
+     font-weight: 500;
+     color: #a8b4c4;
+     line-height: 1.2;
+     letter-spacing: 0.01em;
+   }
+
+   .sqCardStatVal {
+     font-size: 13px;
+     font-weight: 600;
+     font-family: var(--mono);
+     color: #0f172a;
+     letter-spacing: -0.02em;
+     line-height: 1.15;
+   }
+
+   .sqCardSnapshot {
+     margin: 0 0 18px;
+     font-size: 12px;
+     line-height: 1.45;
+     color: var(--ink-2);
+     white-space: nowrap;
+     overflow-x: auto;
+     overflow-y: hidden;
+     min-width: 0;
+     -webkit-overflow-scrolling: touch;
+     scrollbar-width: none;
+   }
+
+   .sqCardSnapshot::-webkit-scrollbar {
+     display: none;
+   }
+
+   .sqCardSnapshot--idle {
+     margin: 0;
+     color: #94a3b8;
+     font-size: 12px;
+     font-weight: 400;
+     white-space: normal;
+     overflow: visible;
+     line-height: 1.45;
+   }
+
+   .sqCardSnapLab {
+     font-weight: 500;
+     color: var(--ink-3);
+   }
+
+   .sqCardSnapVal {
+     font-weight: 500;
+     font-family: var(--mono);
+     font-size: 12px;
+     color: var(--ink-2);
+     letter-spacing: -0.02em;
+   }
+
+   .sqCardSnapSep {
+     margin: 0 5px;
+     color: var(--border-strong);
+     font-weight: 400;
+   }
+
+   .sqCardCtaRow {
+     display: flex;
+     align-items: center;
+     justify-content: flex-start;
+     gap: var(--sq-space-xs, 6px);
+     margin-top: auto;
+     padding-top: var(--sq-space-xs, 6px);
+     font-size: 13px;
+     font-weight: 600;
+     color: #4d6ba8;
+     transition: color 0.18s ease;
+   }
+
+   .sqCard:hover:not(:disabled) .sqCardCtaRow {
+     color: #2f4f8f;
+   }
+
+   .sqCardCtaText {
+     letter-spacing: 0.01em;
+     text-underline-offset: 3px;
+   }
+
+   .sqCard:hover:not(:disabled) .sqCardCtaText {
+     text-decoration: underline;
+     text-decoration-color: rgba(36, 80, 204, 0.35);
+   }
+
+   .sqCardCtaIcon {
+     font-size: 15px;
+     line-height: 1;
+     transition: transform 0.2s var(--ease-out);
+   }
+
+   .sqCard:hover:not(:disabled) .sqCardCtaIcon {
+     transform: translateX(3px);
+   }
+
+   @media (max-width: 560px) {
+     .sqCardStatGrid {
+       flex-direction: column;
+       align-items: flex-start;
+       gap: 8px;
+     }
+   }
+
+   .sqEmpty {
+     text-align: center;
+     padding: 56px 28px;
+     color: var(--ink-3);
+     background: var(--surface);
+     border: 1px dashed var(--border-strong);
+     border-radius: var(--radius-lg);
+     font-size: 15px;
+     font-weight: 500;
+     line-height: 1.55;
+   }

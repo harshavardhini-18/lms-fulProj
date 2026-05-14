@@ -1,26 +1,20 @@
 import { Router } from 'express';
 import { requireAdmin, requireUser } from '../middleware/auth.js';
 import {
-  archiveQuiz,
   create,
-  duplicate,
   getById,
   list,
-  publish,
   remove,
   update,
-} from '../controllers/quizController.js';
+} from '../controllers/quizCategoryController.js';
 
 const router = Router();
 
 router.use(requireUser);
 
 router.get('/', list);
-router.post('/', requireAdmin, create);
-router.post('/:id/publish', requireAdmin, publish);
-router.post('/:id/archive', requireAdmin, archiveQuiz);
-router.post('/:id/duplicate', requireAdmin, duplicate);
 router.get('/:id', getById);
+router.post('/', requireAdmin, create);
 router.put('/:id', requireAdmin, update);
 router.delete('/:id', requireAdmin, remove);
 

@@ -16,8 +16,8 @@
   flex-wrap: wrap;
   gap: 0;
   padding: 16px 28px 8px;
-  border-bottom: 1px solid #f1f5f9;
-  background: #fff;
+  background: transparent;
+  border: none;
 }
 
 .lf-wizard-stepcell {
@@ -25,7 +25,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  min-width: 80px;
+  min-width: 72px;
 }
 
 .lf-wizard-dot {
@@ -67,10 +67,10 @@
 }
 
 .lf-wizard-line {
-  width: 32px;
+  width: 22px;
   height: 2px;
   background: #e2e8f0;
-  margin: 0 4px 20px;
+  margin: 0 2px 20px;
   flex-shrink: 0;
   border-radius: 1px;
 }
@@ -695,4 +695,148 @@
 
 @keyframes lf-spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── Step 2 — Inline video preview ────────────────────────────────── */
+.lf-video-preview-wrap {
+  margin-top: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-width: 560px;
+  position: relative;
+}
+
+.lf-video-preview-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000;
+  position: absolute;
+  inset: 0;
+}
+
+.lf-video-preview-error {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+
+/* ── Step 4 — Topic quiz picker (minimal, professional) ──────────── */
+.lf-quiz-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lf-quiz-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lf-quiz-select-wrap {
+  position: relative;
+  flex: 1 1 280px;
+  min-width: 220px;
+}
+
+.lf-quiz-select {
+  width: 100%;
+  height: 40px;
+  padding: 0 36px 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px;
+}
+
+.lf-quiz-select:hover:not(:disabled) {
+  border-color: #cbd5e1;
+}
+
+.lf-quiz-select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.lf-quiz-select:disabled {
+  background-color: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* Subtle minimal action buttons (Add quiz / Preview) */
+.lf-quiz-link-btn,
+.lf-quiz-preview-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.lf-quiz-link-btn:hover,
+.lf-quiz-preview-btn:hover:not(:disabled) {
+  border-color: #c7d2fe;
+  color: #4f46e5;
+  background: #fafbff;
+}
+
+.lf-quiz-preview-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #94a3b8;
+}
+
+.lf-quiz-link-btn svg,
+.lf-quiz-preview-btn svg {
+  flex-shrink: 0;
+}
+
+.lf-quiz-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 2px 0 0;
+}
+
+@media (max-width: 640px) {
+  .lf-quiz-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .lf-quiz-link-btn,
+  .lf-quiz-preview-btn {
+    justify-content: center;
+  }
 }

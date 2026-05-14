@@ -35,6 +35,7 @@ function Navbar({ role = 'student' }) {
     return [
       { label: 'Home', path: '/student/home' },
       { label: 'Courses', path: '/student/courses' },
+      { label: 'Quizzes', path: '/student/quizzes' },
       { label: 'Career', path: '/student/career' },
       { label: 'Profile', path: '/student/profile' },
     ]

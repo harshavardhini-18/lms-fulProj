@@ -8,6 +8,10 @@
   padding-top: var(--app-header-height);
 }
 
+.appShell--noHeader main {
+  padding-top: 0;
+}
+
 .placeholderPage {
   min-height: calc(100vh - var(--app-header-height));
   display: grid;

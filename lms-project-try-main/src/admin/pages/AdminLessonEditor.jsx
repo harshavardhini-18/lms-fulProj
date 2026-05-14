@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { adminLessonService } from '../services/adminLessonService';
-import { adminQuizService } from '../services/adminQuizService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import Toast from '../components/common/Toast';
 import VideoPreview from '../components/common/VideoPreview';
@@ -12,7 +11,6 @@ export default function AdminLessonEditor() {
   const navigate = useNavigate();
 
   const [lesson, setLesson] = useState(null);
-  const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
@@ -25,8 +23,6 @@ export default function AdminLessonEditor() {
     videoDuration: 0,
     learningOutcomes: [],
     resources: [],
-    quizId: '',
-    passingScore: 70,
   });
 
   const [newOutcome, setNewOutcome] = useState('');
@@ -34,7 +30,6 @@ export default function AdminLessonEditor() {
 
   useEffect(() => {
     fetchLessonData();
-    fetchQuizzes();
   }, [courseId, moduleId, lessonId]);
 
   const fetchLessonData = async () => {
@@ -50,8 +45,6 @@ export default function AdminLessonEditor() {
         videoDuration: lesson.videoDuration || 0,
         learningOutcomes: lesson.learningOutcomes || [],
         resources: lesson.resources || [],
-        quizId: lesson.quizId || '',
-        passingScore: lesson.passingScore || 70,
       });
     } catch (error) {
       showToast('Failed to load lesson', 'error');
@@ -61,20 +54,11 @@ export default function AdminLessonEditor() {
     }
   };
 
-  const fetchQuizzes = async () => {
-    try {
-      const response = await adminQuizService.getAllQuizzes();
-      setQuizzes(response.data || []);
-    } catch (error) {
-      console.error('Error fetching quizzes:', error);
-    }
-  };
-
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'videoDuration' || name === 'passingScore' ? parseInt(value) : value
+      [name]: name === 'videoDuration' ? parseInt(value) : value
     }));
   };
 
@@ -308,42 +292,6 @@ export default function AdminLessonEditor() {
             </div>
           </section>
 
-          {/* Quiz Assignment */}
-          <section className="editor-section">
-            <h2>Quiz Assignment</h2>
-
-            <div className="form-group">
-              <label>Assign Quiz at End of Lesson (optional)</label>
-              <select
-                name="quizId"
-                value={formData.quizId}
-                onChange={handleFormChange}
-                className="form-select"
-              >
-                <option value="">-- No Quiz --</option>
-                {quizzes.map(quiz => (
-                  <option key={quiz._id} value={quiz._id}>
-                    {quiz.title} (Pass: {quiz.passingScore}%)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {formData.quizId && (
-              <div className="form-group">
-                <label>Passing Score (%)</label>
-                <input
-                  type="number"
-                  name="passingScore"
-                  value={formData.passingScore}
-                  onChange={handleFormChange}
-                  className="form-input"
-                  min="0"
-                  max="100"
-                />
-              </div>
-            )}
-          </section>
         </div>
 
         {/* Sidebar */}
@@ -367,10 +315,6 @@ export default function AdminLessonEditor() {
             <div className="info-item">
               <strong>Resources:</strong>
               <span>{formData.resources.length}</span>
-            </div>
-            <div className="info-item">
-              <strong>Quiz:</strong>
-              <span>{formData.quizId ? '✓ Assigned' : '✗ None'}</span>
             </div>
           </div>
         </aside>

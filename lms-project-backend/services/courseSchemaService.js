@@ -105,7 +105,6 @@ export async function ensureCourseSchema() {
 			timestamp_notes_enabled BOOLEAN NOT NULL DEFAULT FALSE,
 			is_free_preview BOOLEAN NOT NULL DEFAULT FALSE,
 			locked_until_previous_completed BOOLEAN NOT NULL DEFAULT FALSE,
-			quiz_id VARCHAR(120) NULL,
 			resources JSONB NOT NULL DEFAULT '[]'::jsonb,
 			assignment_details JSONB NOT NULL DEFAULT '{}'::jsonb,
 			position INTEGER NOT NULL CHECK (position >= 0),
@@ -317,17 +316,13 @@ export async function ensureCourseSchema() {
 		)
 	`);
 
+	// ─── REUSABLE QUIZ + QUESTION BANK ────────────────────────────────────
 	await pool.query(`
-		CREATE TABLE IF NOT EXISTS quizzes (
+		CREATE TABLE IF NOT EXISTS quiz_categories (
 			id BIGSERIAL PRIMARY KEY,
-			course_id BIGINT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-			subtopic_id BIGINT NULL REFERENCES subtopics(id) ON DELETE SET NULL,
-			title VARCHAR(255) NOT NULL,
+			name VARCHAR(120) NOT NULL,
+			slug VARCHAR(140) NOT NULL UNIQUE,
 			description TEXT NOT NULL DEFAULT '',
-			trigger_timestamp_seconds INTEGER NOT NULL DEFAULT 0 CHECK (trigger_timestamp_seconds >= 0),
-			questions JSONB NOT NULL DEFAULT '[]'::jsonb,
-			status VARCHAR(20) NOT NULL DEFAULT 'active'
-				CHECK (status IN ('active', 'inactive')),
 			created_by BIGINT NOT NULL REFERENCES users(id),
 			updated_by BIGINT NULL REFERENCES users(id),
 			is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -335,6 +330,168 @@ export async function ensureCourseSchema() {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
+	`);
+
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS questions (
+			id BIGSERIAL PRIMARY KEY,
+			type VARCHAR(20) NOT NULL DEFAULT 'mcq'
+				CHECK (type IN ('mcq', 'multi_choice', 'true_false', 'fill_blank', 'code_image')),
+			prompt TEXT NOT NULL,
+			code_image_url TEXT NOT NULL DEFAULT '',
+			options JSONB NOT NULL DEFAULT '[]'::jsonb,
+			accepted_answers JSONB NOT NULL DEFAULT '[]'::jsonb,
+			fill_blank_validation_mode VARCHAR(20) NOT NULL DEFAULT 'strict'
+				CHECK (fill_blank_validation_mode IN ('strict', 'flexible')),
+			category_id BIGINT NULL REFERENCES quiz_categories(id) ON DELETE SET NULL,
+			difficulty VARCHAR(20) NOT NULL DEFAULT 'medium'
+				CHECK (difficulty IN ('easy', 'medium', 'hard')),
+			tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+			points INTEGER NOT NULL DEFAULT 1 CHECK (points >= 0),
+			status VARCHAR(20) NOT NULL DEFAULT 'active'
+				CHECK (status IN ('active', 'archived')),
+			created_by BIGINT NOT NULL REFERENCES users(id),
+			updated_by BIGINT NULL REFERENCES users(id),
+			is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+			deleted_at TIMESTAMPTZ NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`);
+
+	await pool.query(`
+		ALTER TABLE questions
+		ADD COLUMN IF NOT EXISTS fill_blank_validation_mode VARCHAR(20) NOT NULL DEFAULT 'strict'
+	`);
+
+	await pool.query(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1
+				FROM pg_constraint
+				WHERE conname = 'questions_fill_blank_validation_mode_check'
+			) THEN
+				ALTER TABLE questions
+				ADD CONSTRAINT questions_fill_blank_validation_mode_check
+				CHECK (fill_blank_validation_mode IN ('strict', 'flexible'));
+			END IF;
+		END;
+		$$;
+	`);
+
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS quizzes (
+			id BIGSERIAL PRIMARY KEY,
+			title VARCHAR(255) NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			category_id BIGINT NULL REFERENCES quiz_categories(id) ON DELETE SET NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'archived',
+			total_points INTEGER NOT NULL DEFAULT 0 CHECK (total_points >= 0),
+			created_by BIGINT NOT NULL REFERENCES users(id),
+			updated_by BIGINT NULL REFERENCES users(id),
+			is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+			deleted_at TIMESTAMPTZ NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`);
+
+	await pool.query(`
+		DO $$
+		DECLARE r record;
+		BEGIN
+			FOR r IN (
+				SELECT c.conname
+				FROM pg_constraint c
+				JOIN pg_class rel ON rel.oid = c.conrelid
+				WHERE rel.relname = 'quizzes'
+					AND rel.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+					AND c.contype = 'c'
+					AND pg_get_constraintdef(c.oid) LIKE '%active%'
+			) LOOP
+				EXECUTE format('ALTER TABLE quizzes DROP CONSTRAINT %I', r.conname);
+			END LOOP;
+		END $$;
+	`);
+
+	await pool.query(`
+		UPDATE quizzes SET status = 'published' WHERE status = 'active' AND is_deleted = FALSE
+	`);
+
+	await pool.query(`
+		ALTER TABLE quizzes ALTER COLUMN status SET DEFAULT 'archived'
+	`);
+
+	await pool.query(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint WHERE conname = 'quizzes_status_check'
+			) THEN
+				ALTER TABLE quizzes ADD CONSTRAINT quizzes_status_check
+					CHECK (status IN ('draft', 'published', 'archived'));
+			END IF;
+		END $$;
+	`);
+
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS quiz_questions (
+			quiz_id BIGINT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+			question_id BIGINT NOT NULL REFERENCES questions(id) ON DELETE RESTRICT,
+			position INTEGER NOT NULL CHECK (position >= 0),
+			points_override INTEGER NULL CHECK (points_override IS NULL OR points_override >= 0),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (quiz_id, question_id)
+		)
+	`);
+
+	await pool.query(`
+		DELETE FROM quiz_questions qq
+		WHERE NOT EXISTS (
+			SELECT 1 FROM quizzes q WHERE q.id = qq.quiz_id AND q.is_deleted = FALSE
+		)
+	`);
+
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS quiz_attempts (
+			id BIGSERIAL PRIMARY KEY,
+			quiz_id BIGINT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			status VARCHAR(20) NOT NULL DEFAULT 'in_progress'
+				CHECK (status IN ('in_progress', 'submitted')),
+			answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+			flagged JSONB NOT NULL DEFAULT '{}'::jsonb,
+			current_index INTEGER NOT NULL DEFAULT 0 CHECK (current_index >= 0),
+			score_earned NUMERIC(10, 2) NULL,
+			max_points INTEGER NULL,
+			result_breakdown JSONB NULL,
+			started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			submitted_at TIMESTAMPTZ NULL,
+			time_spent_seconds INTEGER NULL CHECK (time_spent_seconds IS NULL OR time_spent_seconds >= 0)
+		)
+	`);
+
+		// ensure visited column exists so client can persist per-question visited state
+	    await pool.query(`
+	        ALTER TABLE quiz_attempts
+	        ADD COLUMN IF NOT EXISTS visited JSONB NOT NULL DEFAULT '{}'::jsonb
+	    `);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_quiz
+		ON quiz_attempts(user_id, quiz_id)
+	`);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_quiz_attempts_quiz_status
+		ON quiz_attempts(quiz_id, status)
+	`);
+
+	await pool.query(`
+		CREATE UNIQUE INDEX IF NOT EXISTS uq_quiz_attempt_one_in_progress
+		ON quiz_attempts(user_id, quiz_id)
+		WHERE status = 'in_progress'
 	`);
 
 	await pool.query(`
@@ -403,13 +560,54 @@ export async function ensureCourseSchema() {
 	`);
 
 	await pool.query(`
-		CREATE INDEX IF NOT EXISTS idx_quizzes_course_active
-		ON quizzes(course_id, is_deleted, status, trigger_timestamp_seconds)
+		CREATE INDEX IF NOT EXISTS idx_quiz_categories_active
+		ON quiz_categories(is_deleted, name)
 	`);
 
 	await pool.query(`
-		CREATE INDEX IF NOT EXISTS idx_quizzes_subtopic_active
-		ON quizzes(subtopic_id, is_deleted, status)
+		CREATE INDEX IF NOT EXISTS idx_questions_category_active
+		ON questions(category_id, is_deleted, status)
+	`);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_questions_type_active
+		ON questions(type, is_deleted, status)
+	`);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_questions_tags_gin
+		ON questions USING GIN (tags)
+	`);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_quizzes_active
+		ON quizzes(is_deleted, status, updated_at DESC)
+	`);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_quizzes_category
+		ON quizzes(category_id, is_deleted)
+	`);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_quiz_questions_position
+		ON quiz_questions(quiz_id, position)
+	`);
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_quiz_questions_question
+		ON quiz_questions(question_id)
+	`);
+
+	// Link each topic (subtopic) to at most one reusable quiz from the quiz bank.
+	await pool.query(`
+		ALTER TABLE subtopics
+		ADD COLUMN IF NOT EXISTS quiz_id BIGINT NULL REFERENCES quizzes(id) ON DELETE SET NULL
+	`);
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS idx_subtopics_quiz_id
+		ON subtopics(quiz_id)
+		WHERE quiz_id IS NOT NULL AND is_deleted = FALSE
 	`);
 
 	await pool.query(`
@@ -485,6 +683,38 @@ export async function ensureCourseSchema() {
 			) THEN
 				CREATE TRIGGER quizzes_set_updated_at
 				BEFORE UPDATE ON quizzes
+				FOR EACH ROW
+				EXECUTE FUNCTION set_updated_at();
+			END IF;
+		END;
+		$$;
+	`);
+
+	await pool.query(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_trigger
+				WHERE tgname = 'questions_set_updated_at'
+			) THEN
+				CREATE TRIGGER questions_set_updated_at
+				BEFORE UPDATE ON questions
+				FOR EACH ROW
+				EXECUTE FUNCTION set_updated_at();
+			END IF;
+		END;
+		$$;
+	`);
+
+	await pool.query(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_trigger
+				WHERE tgname = 'quiz_categories_set_updated_at'
+			) THEN
+				CREATE TRIGGER quiz_categories_set_updated_at
+				BEFORE UPDATE ON quiz_categories
 				FOR EACH ROW
 				EXECUTE FUNCTION set_updated_at();
 			END IF;
