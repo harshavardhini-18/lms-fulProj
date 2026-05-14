@@ -36,7 +36,7 @@ function CourseCard({ course }) {
           <h3 className={styles.title}>{course.title}</h3>
 {/* 
           <p className={styles.author}>
-            By <b>Better Tomorrow</b>
+            By <b>BT</b>
           </p> */}
 
           <div className={styles.ratingRow}>

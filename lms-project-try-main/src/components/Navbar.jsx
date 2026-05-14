@@ -69,7 +69,7 @@ function Navbar({ role = 'student' }) {
       <nav className={styles.navbar}>
         <div className={styles.brand}>
          
-          <span className={styles.brandText}>Better Tomorrow</span>
+          <span className={styles.brandText}>BT</span>
         </div>
 
         <div className={styles.menuWrap}>
