@@ -46,6 +46,19 @@ function isPickThenSubmitType(q) {
   return q && (q.type === 'mcq' || q.type === 'true_false' || q.type === 'code_image')
 }
 
+/** Short vs long copy inside fixed-size MC tiles: same footprint; typography + alignment adapt. */
+function mcqOptionTier(label) {
+  const t = String(label ?? '').trim()
+  if (!t) return 'short'
+  const oneLine = !/[\r\n]/.test(t)
+  const words = t.split(/\s+/).filter(Boolean).length
+  if (!oneLine) return 'long'
+  if (t.length >= 48 || words >= 8) return 'long'
+  if (words >= 4 && t.length >= 22) return 'long'
+  if (t.length >= 36) return 'long'
+  return 'short'
+}
+
 function parseAttemptStartedAtMs(att) {
   if (!att || typeof att !== 'object') return null
   const raw = att.startedAt ?? att.started_at
@@ -578,9 +591,12 @@ export default function StudentQuizAttempt() {
   const showChoiceGrid = autoChoiceAdvance && opts.length > 0
   /** Purple full-bleed row + numbered badges (same as 4-opt MCQ) for 2–4 options, e.g. true/false */
   const optsPurpleFullBleed = showChoiceGrid && opts.length >= 2 && opts.length <= 4
+  /** All options short: fixed tiles slightly above ref (~216×278); long copy keeps full-bleed grid */
+  const optsAllShort =
+    showChoiceGrid && opts.length > 0 && opts.every((opt) => mcqOptionTier(opt.label) === 'short')
   const choiceGridClassName = `sqGameOpts sqGameOpts--grid sqGameOpts--cols-${optsGridCols}${
     optsPurpleFullBleed ? ' sqGameOpts--fullBleed' : ''
-  }`
+  }${optsAllShort ? ' sqGameOpts--compactTiles' : ''}`
 
   const questionOutsideBody = showChoiceGrid && optsPurpleFullBleed
   const questionStageEnd = showChoiceGrid && !optsPurpleFullBleed
@@ -591,7 +607,15 @@ export default function StudentQuizAttempt() {
 
   const questionBlock = (
     <div className={questionShellClass}>
-      <div className="sqGameCard sqGameCard--questionBox">
+      {questions.length > 0 ? (
+        <p className="sqGameQLabel" id={`sq-q-label-${uid}`}>
+          Question {currentIndex + 1}
+        </p>
+      ) : null}
+      <div
+        className="sqGameCard sqGameCard--questionBox"
+        aria-labelledby={questions.length > 0 ? `sq-q-label-${uid}` : undefined}
+      >
         {questions.length > 0 ? (
           <div className="sqGameQCountPill" aria-label={`Question ${currentIndex + 1} of ${questions.length}`}>
             <span className="sqGameQCountPillCur">{currentIndex + 1}</span>
@@ -624,6 +648,8 @@ export default function StudentQuizAttempt() {
           : String(raw) === String(opt.id)
       const fillClass =
         autoChoiceAdvance && String(opt.id) === pickFillingId ? ' sqGameOpt--fillProgress' : ''
+      const letter = String.fromCharCode(65 + idx)
+      const tier = mcqOptionTier(opt.label)
       return (
         <button
           key={opt.id || idx}
@@ -631,8 +657,14 @@ export default function StudentQuizAttempt() {
           className={`sqGameOpt sqGameOpt--tile${selected ? ' sqGameOpt--selected' : ''}${fillClass}`}
           disabled={autoChoiceAdvance && pickFillingId != null}
           onClick={() => handleChoiceAdvanceClick(opt.id)}
+          aria-label={`Option ${letter}: ${opt.label}`}
         >
-          <span className="sqGameOptText sqGameOptText--tile">{opt.label}</span>
+          <span className="sqGameOptKey" aria-hidden="true">
+            {letter}
+          </span>
+          <span className={`sqGameOptInner sqGameOptInner--${tier}`}>
+            <span className="sqGameOptText sqGameOptText--tile">{opt.label}</span>
+          </span>
         </button>
       )
     })

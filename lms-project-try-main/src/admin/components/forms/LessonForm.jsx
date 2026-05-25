@@ -549,7 +549,7 @@ export default function LessonForm({ lesson, onSave, saving }) {
                     disabled={quizzesLoading}
                   >
                     <option value="">
-                      {quizzesLoading ? 'Loading quizzes…' : '— No quiz —'}
+                      {quizzesLoading ? 'Loading quizzes…' : 'Select quiz'}
                     </option>
                     {quizOptions.map((q) => (
                       <option key={q.id} value={String(q.id)}>

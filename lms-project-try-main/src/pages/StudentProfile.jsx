@@ -1,291 +1,313 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import styles from './StudentProfile.module.css';
 import { useAuth } from '../auth/AuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
+const EMPTY_FORM = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  collegeName: '',
+  yearOfStudy: '',
+  department: '',
+  rollNo: '',
+};
+
 function mapUserToForm(sourceUser) {
+  if (!sourceUser) return { ...EMPTY_FORM };
+  const o = sourceUser.onboarding || {};
   return {
-    firstName: sourceUser?.onboarding?.firstName || '',
-    lastName: sourceUser?.onboarding?.lastName || '',
-    email: sourceUser?.email || '',
-    phone: sourceUser?.onboarding?.phone || '',
-    bio: sourceUser?.profile?.bio || '',
-    department: sourceUser?.onboarding?.department || '',
-    collegeName: sourceUser?.onboarding?.collegeName || '',
-    rollNo: sourceUser?.onboarding?.rollNo || '',
-    yearOfStudy: sourceUser?.onboarding?.yearOfStudy || '',
+    firstName: o.firstName || sourceUser.first_name || '',
+    lastName: o.lastName || sourceUser.last_name || '',
+    email: sourceUser.email || '',
+    phone: o.phone || sourceUser.phone || '',
+    collegeName: o.collegeName || sourceUser.college_name || '',
+    yearOfStudy: o.yearOfStudy || sourceUser.year_of_study || '',
+    department: o.department || sourceUser.department || '',
+    rollNo: o.rollNo || sourceUser.roll_no || '',
   };
+}
+
+function CameraIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
 }
 
 export default function StudentProfile() {
   const { user } = useAuth();
-
-  const [activeTab, setActiveTab] = useState('personal');
   const [avatarPreview, setAvatarPreview] = useState('');
   const [isBootstrapped, setIsBootstrapped] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
-  const [form, setForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    bio: '',
-    department: '',
-    collegeName: '',
-    rollNo: '',
-    yearOfStudy: '',
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadProfile() {
-      const userId = localStorage.getItem('lmsUserId');
-      if (!userId) {
-        if (isMounted && user) {
-          setForm(mapUserToForm(user));
-          setIsBootstrapped(true);
-        }
-        return;
+  const loadProfile = useCallback(async () => {
+    const userId = localStorage.getItem('lmsUserId');
+    if (!userId) {
+      if (user) {
+        setForm(mapUserToForm(user));
+        setAvatarPreview(user.avatarUrl || '');
       }
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-          headers: { 'x-user-id': userId },
-        });
-        const payload = await response.json().catch(() => ({}));
-        const backendUser = payload?.data;
-
-        if (!response.ok || !backendUser) {
-          throw new Error(payload?.message || 'Failed to load profile');
-        }
-
-        if (isMounted) {
-          setForm(mapUserToForm(backendUser));
-          setAvatarPreview(backendUser.avatarUrl || '');
-          setIsBootstrapped(true);
-        }
-      } catch {
-        if (isMounted && user) {
-          setForm(mapUserToForm(user));
-          setAvatarPreview(user.avatarUrl || '');
-          setIsBootstrapped(true);
-        }
-      }
+      setIsBootstrapped(true);
+      return;
     }
 
-    loadProfile();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        headers: { 'x-user-id': userId },
+      });
+      const payload = await response.json().catch(() => ({}));
+      const backendUser = payload?.data;
 
-    return () => {
-      isMounted = false;
-    };
+      if (!response.ok || !backendUser) {
+        throw new Error(payload?.message || 'Failed to load profile');
+      }
+
+      setForm(mapUserToForm(backendUser));
+      setAvatarPreview(backendUser.avatar_url || backendUser.avatarUrl || '');
+    } catch {
+      if (user) {
+        setForm(mapUserToForm(user));
+        setAvatarPreview(user.avatarUrl || '');
+      }
+    } finally {
+      setIsBootstrapped(true);
+    }
   }, [user]);
 
   useEffect(() => {
-    if (!isBootstrapped) return;
-
-    const userId = localStorage.getItem('lmsUserId');
-    if (!userId) return;
-
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        await fetch(`${API_BASE_URL}/api/auth/update-profile`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': userId,
-          },
-          body: JSON.stringify({
-            fullName: `${form.firstName} ${form.lastName}`.trim(),
-            profile: {
-              bio: form.bio,
-            },
-            onboarding: {
-              firstName: form.firstName,
-              lastName: form.lastName,
-              phone: form.phone,
-              department: form.department,
-              yearOfStudy: form.yearOfStudy,
-              collegeName: form.collegeName,
-              rollNo: form.rollNo,
-            },
-          }),
-        });
-      } catch {
-        // Keep the current UX unchanged if autosave fails.
-      }
-    }, 500);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [form, isBootstrapped]);
+    loadProfile();
+  }, [loadProfile]);
 
   const onChange = (e) => {
     const { name, value } = e.target;
-    setForm(p => ({ ...p, [name]: value }));
+    setForm((p) => ({ ...p, [name]: value }));
+    setSaveMsg('');
   };
 
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setAvatarPreview(ev.target.result);
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setSaveMsg('Image must be 5MB or smaller.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => setAvatarPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleDeleteAvatar = () => {
+    setAvatarPreview('');
+  };
+
+  const handleSave = async () => {
+    const userId = localStorage.getItem('lmsUserId');
+    if (!userId) {
+      setSaveMsg('Sign in to save your profile.');
+      return;
+    }
+
+    setSaving(true);
+    setSaveMsg('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/update-profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId,
+        },
+        body: JSON.stringify({
+          fullName: `${form.firstName} ${form.lastName}`.trim(),
+          onboarding: {
+            firstName: form.firstName,
+            lastName: form.lastName,
+            phone: form.phone,
+            department: form.department,
+            yearOfStudy: form.yearOfStudy,
+            collegeName: form.collegeName,
+            rollNo: form.rollNo,
+          },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || 'Failed to save profile');
+      if (payload?.data) setForm(mapUserToForm(payload.data));
+      setSaveMsg('Changes saved.');
+    } catch (err) {
+      setSaveMsg(err.message || 'Could not save profile.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (!user || !isBootstrapped) return <p>Loading...</p>;
+  if (!user || !isBootstrapped) {
+    return (
+      <div className={styles.page}>
+        <p className={styles.loading}>Loading…</p>
+      </div>
+    );
+  }
 
   return (
-    <div className={styles.container}>
-      <div className={styles.content}>
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <header className={styles.cardHead}>
+          <h1 className={styles.title}>My Profile</h1>
+          <p className={styles.subtitle}>Manage your account information</p>
+          <p className={styles.sectionLabel}>Personal Information</p>
+        </header>
 
-        {/* HEADER */}
-        <div className={styles.header}>
-          <h1>My Profile</h1>
-          <p>Manage your account information</p>
+        <div className={styles.cardBody}>
+          <div className={styles.avatarRow}>
+            <div className={styles.avatarWrap}>
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="" className={styles.avatarImg} />
+              ) : (
+                <div className={styles.avatarPlaceholder}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <circle cx="12" cy="8" r="4" stroke="#94a3b8" strokeWidth="1.5" />
+                    <path
+                      d="M4 20c1.5-4 6-6 8-6s6.5 2 8 6"
+                      stroke="#94a3b8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </div>
+              )}
+              <label className={styles.avatarCamBtn} aria-label="Upload photo">
+                <CameraIcon />
+                <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={handleAvatarChange} />
+              </label>
+            </div>
+            <div className={styles.avatarActions}>
+              <label className={styles.btnPrimary}>
+                Upload New
+                <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={handleAvatarChange} />
+              </label>
+              <button type="button" className={styles.btnGhost} onClick={handleDeleteAvatar}>
+                Delete avatar
+              </button>
+              <p className={styles.avatarHint}>JPG, PNG (max 5MB)</p>
+            </div>
+          </div>
 
-          <div className={styles.tabs}>
-            <button
-              className={`${styles.tab} ${activeTab === 'personal' ? styles.activeTab : ''}`}
-              onClick={() => setActiveTab('personal')}
-            >
-              Personal Information
-            </button>
+          <div className={styles.grid}>
+            <div className={styles.field}>
+              <label className={styles.label}>
+                First Name <span className={styles.req}>*</span>
+              </label>
+              <input
+                className={styles.input}
+                name="firstName"
+                value={form.firstName}
+                onChange={onChange}
+                placeholder="First name"
+                required
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>
+                Last Name <span className={styles.req}>*</span>
+              </label>
+              <input
+                className={styles.input}
+                name="lastName"
+                value={form.lastName}
+                onChange={onChange}
+                placeholder="Last name"
+                required
+              />
+            </div>
 
-            <button
-              className={`${styles.tab} ${activeTab === 'academic' ? styles.activeTab : ''}`}
-              onClick={() => setActiveTab('academic')}
-            >
-              Academic Information
-            </button>
+            <div className={styles.field}>
+              <label className={styles.label}>Email</label>
+              <input className={`${styles.input} ${styles.inputReadonly}`} value={form.email} readOnly />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Mobile Number</label>
+              <div className={styles.phoneWrap}>
+                <span className={styles.phonePrefix} aria-hidden>
+                  +234
+                </span>
+                <input
+                  className={`${styles.input} ${styles.inputPhone}`}
+                  name="phone"
+                  value={form.phone}
+                  onChange={onChange}
+                  placeholder="0806 123 7890"
+                />
+              </div>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label}>College Name</label>
+              <input
+                className={styles.input}
+                name="collegeName"
+                value={form.collegeName}
+                onChange={onChange}
+                placeholder="College name"
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Year of Study</label>
+              <select className={styles.input} name="yearOfStudy" value={form.yearOfStudy} onChange={onChange}>
+                <option value="">Select year</option>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+              </select>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label}>Department</label>
+              <input
+                className={styles.input}
+                name="department"
+                value={form.department}
+                onChange={onChange}
+                placeholder="e.g. Computer Science"
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Roll No</label>
+              <input
+                className={styles.input}
+                name="rollNo"
+                value={form.rollNo}
+                onChange={onChange}
+                placeholder="Roll number"
+              />
+            </div>
           </div>
         </div>
 
-        {/* PERSONAL TAB */}
-        {activeTab === 'personal' && (
-          <>
-            {/* PROFILE PIC */}
-            <div className={styles.section}>
-              <label className={styles.sectionTitle}>Your Profile Picture</label>
-
-              <div className={styles.avatarContainer}>
-                <div className={styles.avatarBox}>
-                  {avatarPreview ? (
-                    <img src={avatarPreview} alt="Profile" className={styles.avatarImg} />
-                  ) : (
-                    <div className={styles.placeholderAvatar}>👤</div>
-                  )}
-                </div>
-
-                <div className={styles.uploadInfo}>
-                  <label className={styles.uploadLabel}>
-                    <span className={styles.uploadText}>📤 Upload your photo</span>
-                    <input type="file" accept="image/*" hidden onChange={handleAvatarChange} />
-                  </label>
-                  <p className={styles.uploadHint}>JPG, PNG (Max 5MB)</p>
-                </div>
-              </div>
-            </div>
-
-            {/* PERSONAL INFO */}
-            <div className={styles.section}>
-              <label className={styles.sectionTitle}>Personal Information</label>
-
-              <div className={styles.row}>
-                <div className={styles.field}>
-                  <label>First Name</label>
-                  <input className={styles.input} name="firstName" value={form.firstName} onChange={onChange} />
-                </div>
-
-                <div className={styles.field}>
-                  <label>Last Name</label>
-                  <input className={styles.input} name="lastName" value={form.lastName} onChange={onChange} />
-                </div>
-              </div>
-
-              <div className={styles.row}>
-                <div className={styles.field}>
-                  <label>Email</label>
-                  <input className={styles.input} value={form.email} readOnly />
-                </div>
-
-                <div className={styles.field}>
-                  <label>Phone</label>
-                  <input className={styles.input} name="phone" value={form.phone} onChange={onChange} />
-                </div>
-              </div>
-
-              <div className={styles.field}>
-                <label>Bio</label>
-                <textarea className={styles.textarea} name="bio" value={form.bio} onChange={onChange} />
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ACADEMIC TAB */}
-        {activeTab === 'academic' && (
-          <>
-            {/* PROFILE PIC */}
-            <div className={styles.section}>
-              <label className={styles.sectionTitle}>Your Profile Picture</label>
-
-              <div className={styles.avatarContainer}>
-                <div className={styles.avatarBox}>
-                  {avatarPreview ? (
-                    <img src={avatarPreview} alt="Profile" className={styles.avatarImg} />
-                  ) : (
-                    <div className={styles.placeholderAvatar}>👤</div>
-                  )}
-                </div>
-
-                <div className={styles.uploadInfo}>
-                  <label className={styles.uploadLabel}>
-                    <span className={styles.uploadText}>📤 Upload your photo</span>
-                    <input type="file" accept="image/*" hidden onChange={handleAvatarChange} />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* ACADEMIC INFO */}
-            <div className={styles.section}>
-              <label className={styles.sectionTitle}>Academic Information</label>
-
-              <div className={styles.row}>
-                <div className={styles.field}>
-                  <label>Department</label>
-                  <input className={styles.input} name="department" value={form.department} onChange={onChange} />
-                </div>
-
-                <div className={styles.field}>
-                  <label>Year</label>
-                  <select className={styles.select} name="yearOfStudy" value={form.yearOfStudy} onChange={onChange}>
-                    <option value="">Select</option>
-                    <option>1st Year</option>
-                    <option>2nd Year</option>
-                    <option>3rd Year</option>
-                    <option>4th Year</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className={styles.row}>
-                <div className={styles.field}>
-                  <label>College</label>
-                  <input className={styles.input} name="collegeName" value={form.collegeName} onChange={onChange} />
-                </div>
-
-                <div className={styles.field}>
-                  <label>Roll No</label>
-                  <input className={styles.input} name="rollNo" value={form.rollNo} onChange={onChange} />
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
+        <footer className={styles.cardFoot}>
+          {saveMsg ? (
+            <p className={saveMsg.includes('saved') ? styles.saveOk : styles.saveErr} role="status">
+              {saveMsg}
+            </p>
+          ) : null}
+          <button type="button" className={styles.btnSave} onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </footer>
       </div>
     </div>
   );

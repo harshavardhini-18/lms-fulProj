@@ -231,12 +231,37 @@ export async function createUserByAdmin(payload) {
 /* ---------------- UPDATE PROFILE ---------------- */
 
 export async function updateUserProfile(userId, payload) {
+	const ob = payload?.onboarding || {};
+	const fullName =
+		(payload?.fullName && String(payload.fullName).trim()) ||
+		`${ob.firstName || ''} ${ob.lastName || ''}`.trim() ||
+		null;
+
 	await pool.query(
-		`UPDATE users SET full_name = $1 WHERE id = $2`,
-		[payload.fullName, userId]
+		`UPDATE users SET
+			full_name = COALESCE($1, full_name),
+			first_name = COALESCE($2, first_name),
+			last_name = COALESCE($3, last_name),
+			phone = COALESCE($4, phone),
+			department = COALESCE($5, department),
+			year_of_study = COALESCE($6, year_of_study),
+			college_name = COALESCE($7, college_name),
+			roll_no = COALESCE($8, roll_no)
+		 WHERE id = $9`,
+		[
+			fullName,
+			ob.firstName ?? null,
+			ob.lastName ?? null,
+			ob.phone ?? null,
+			ob.department ?? null,
+			ob.yearOfStudy ?? null,
+			ob.collegeName ?? null,
+			ob.rollNo ?? null,
+			userId,
+		]
 	);
 
-	return { success: true };
+	return getUserById(userId);
 }
 
 /* ---------------- ONBOARDING ---------------- */
