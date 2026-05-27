@@ -1,63 +1,161 @@
 .quizCard {
-  width: min(640px, 88%);
-  margin: 0;
-  border: 1px solid #dbeafe;
-  border-radius: 16px;
-  background: #f8fafc;
-  padding: 1.05rem;
+  width: min(850px, 75%);
+  margin: 0 auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: #ffffff;
+  padding: 1.75rem 2rem 1.85rem;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.16);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  animation: quizCardIn 0.4s ease-out;
+}
+
+.quizHeader {
+  flex: 0 0 auto;
+}
+
+.quizBody {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.quizFooter {
+  flex: 0 0 auto;
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
 }
 
 .badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   margin: 0;
-  padding: 0.2rem 0.55rem;
+  padding: 0.25rem 0.65rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: #1e3a8a;
-  background: #dbeafe;
+  background: #e0e7ff;
 }
 
 .title {
-  margin: 0.75rem 0 0.85rem;
+  margin: 0.9rem 0 1rem;
   color: #0f172a;
-  font-size: 1.7rem;
+  font-size: 1.55rem;
+  line-height: 1.45;
+}
+
+.progressRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
 }
 
 .progressText {
-  margin: 0.7rem 0 0;
-  color: #334155;
-  font-size: 0.88rem;
+  margin: 0;
+  color: #475569;
+  font-size: 0.85rem;
   font-weight: 600;
 }
 
+.progressPct {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.progressBar {
+  position: relative;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0.6rem 0 1rem;
+}
+
+@media (max-width: 1024px) {
+  .quizCard {
+    width: min(780px, 82%);
+  }
+}
+
+@media (max-width: 768px) {
+  .quizCard {
+    width: 90%;
+    padding: 1.5rem 1.5rem 1.6rem;
+  }
+
+  .title {
+    font-size: 1.35rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .quizCard {
+    width: 94%;
+    padding: 1.3rem 1.2rem 1.4rem;
+  }
+}
+
+@keyframes quizCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.progressFill {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: linear-gradient(90deg, #2563eb, #22c55e);
+}
+
 .scoreText {
-  margin: 0.75rem 0 1rem;
-  font-size: 1.05rem;
+  margin: 0.65rem 0 1rem;
+  font-size: 1rem;
   color: #1f2937;
 }
 
 .form {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.9rem;
+  margin-bottom: 0.2rem;
 }
 
 .optionCard {
   display: flex;
   gap: 0.8rem;
   align-items: center;
-  border: 1px solid #dbeafe;
-  border-radius: 12px;
-  padding: 0.7rem 0.85rem;
-  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  background: #f8fafc;
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
 }
 
 .optionCard:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 8px 22px rgba(30, 64, 175, 0.08);
+  border-color: #94a3b8;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
   transform: translateY(-1px);
+  background: #ffffff;
 }
 
 .optionCard input {
@@ -69,27 +167,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.7rem;
-  height: 1.7rem;
+  width: 1.9rem;
+  height: 1.9rem;
   border-radius: 999px;
   background: #e2e8f0;
   color: #0f172a;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 700;
 }
 
 .optionLabel {
-  color: #1f2937;
-  font-size: 1.1rem;
+  color: #0f172a;
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 .submitButton {
   width: fit-content;
-  margin-top: 0.6rem;
   border: none;
-  border-radius: 10px;
-  padding: 0.62rem 1.05rem;
-  font-weight: 600;
+  border-radius: 12px;
+  padding: 0.7rem 1.3rem;
+  font-weight: 700;
   cursor: pointer;
   color: #ffffff;
   background: #1d4ed8;
@@ -107,6 +205,140 @@
 
 .helperText {
   margin: 0.7rem 0 0;
-  color: #475569;
+  color: #64748b;
   font-size: 0.8rem;
+}
+
+.codeBlock {
+  margin: 0.6rem 0 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #0b1220;
+  color: #e2e8f0;
+  overflow: hidden;
+}
+
+.codeHeader {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(30, 41, 59, 0.9);
+  color: #cbd5f5;
+}
+
+.codePre {
+  margin: 0;
+  padding: 0.9rem 1rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.fillBlankInput {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  font-size: 1rem;
+}
+
+.codeImage {
+  display: block;
+  max-width: 100%;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  margin: 0 0 0.75rem;
+}
+
+.resultsList {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 1.2rem;
+}
+
+.resultSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 0.8rem 0 0.9rem;
+}
+
+.resultMetric {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.6rem 0.7rem;
+  text-align: center;
+}
+
+.resultMetricLabel {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 0.2rem;
+}
+
+.resultMetricValue {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.resultItem {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+  background: #ffffff;
+}
+
+.resultHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.resultOk {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
+
+.resultBad {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #b91c1c;
+  background: #fee2e2;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
+
+.resultQuestion {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.resultRow {
+  display: flex;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.resultLabel {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.resultValue {
+  color: #0f172a;
 }

@@ -3,7 +3,6 @@ import {
   createCourse, 
   getCourseById, 
   listCourses,
-  getCourseCountsMap,
   getCourseWithModules,
   getModule,
   getLesson,
@@ -27,11 +26,6 @@ export const list = asyncHandler(async (req, res) => {
   res.json({ success: true, data: courses });
 });
 
-export const countsMap = asyncHandler(async (req, res) => {
-  const data = await getCourseCountsMap();
-  res.json({ success: true, data });
-});
-
 export const getById = asyncHandler(async (req, res) => {
   const course = await getCourseById(req.params.courseId);
   res.json({ success: true, data: course });
@@ -39,19 +33,19 @@ export const getById = asyncHandler(async (req, res) => {
 
 // Get course with all modules and lessons (for learning view)
 export const getCourseDetail = asyncHandler(async (req, res) => {
-  const courseData = await getCourseWithModules(req.params.courseId, req.user);
+  const courseData = await getCourseWithModules(req.params.courseId);
   res.json({ success: true, data: courseData });
 });
 
 // Get a specific module
 export const getModuleDetail = asyncHandler(async (req, res) => {
-  const module = await getModule(req.params.moduleId, req.user);
+  const module = await getModule(req.params.moduleId);
   res.json({ success: true, data: module });
 });
 
 // Get a specific lesson within a module
 export const getLessonDetail = asyncHandler(async (req, res) => {
-  const lesson = await getLesson(req.params.moduleId, req.params.lessonId, req.user);
+  const lesson = await getLesson(req.params.moduleId, req.params.lessonId);
   res.json({ success: true, data: lesson });
 });
 

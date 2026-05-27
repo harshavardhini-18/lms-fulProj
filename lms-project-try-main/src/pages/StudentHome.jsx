@@ -96,6 +96,13 @@ function StudentHome() {
   useEffect(() => {
     const checkOnboarding = async () => {
       try {
+        // Skip check if onboarding just completed
+        const onboardingJustCompleted = sessionStorage.getItem('onboardingJustCompleted')
+        if (onboardingJustCompleted) {
+          sessionStorage.removeItem('onboardingJustCompleted')
+          return
+        }
+
         const userId = localStorage.getItem('lmsUserId')
         const role = String(localStorage.getItem('lmsUserRole') || '').toLowerCase()
         
@@ -109,7 +116,7 @@ function StudentHome() {
         if (res.ok) {
           const data = await res.json()
           const user = data?.data
-          if (user?.isFirstTime !== false) {
+          if (user?.is_first_time !== false) {
             navigate('/student/onboarding', { replace: true })
           }
         }

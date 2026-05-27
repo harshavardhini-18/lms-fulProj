@@ -1,12 +1,5 @@
 import { useEffect, useState } from 'react'
-import {
-  Navigate,
-  Outlet,
-  RouterProvider,
-  createBrowserRouter,
-  useLocation,
-  useParams,
-} from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { onAuthStateChanged } from 'firebase/auth'
 import Navbar from './components/Navbar'
 import Courses from './pages/Courses'
@@ -15,21 +8,18 @@ import Login from './pages/Login'
 import ResetPassword from './pages/ResetPassword'
 import AdminUsers from './pages/AdminUsers'
 import AdminDashboard from './pages/AdminDashboard'
-import StaffDashboard from './pages/StaffDashboard'
 import AdminCoursesManagement from './admin/pages/AdminCoursesManagement'
 import AdminAddCourse from './admin/pages/AdminAddCourse'
 import AdminCourseEditorNew from './admin/pages/AdminCourseEditorNew'
-import AdminCoursePreview from './admin/pages/AdminCoursePreview'
 import AdminQuizManagement from './admin/pages/AdminQuizManagement'
 import AdminQuizEditor from './admin/pages/AdminQuizEditor'
+import Reports from './pages/Reports'
+import StaffDashboard from './pages/StaffDashboard'
 import StudentHome from './pages/StudentHome'
 import StudentOnboarding from './pages/StudentOnboarding'
 import StudentProfile from './pages/StudentProfile'
-import StudentQuizList from './pages/studentQuiz/StudentQuizList'
-import StudentQuizOverview from './pages/studentQuiz/StudentQuizOverview'
-import StudentQuizAttempt from './pages/studentQuiz/StudentQuizAttempt'
-import StudentQuizResults from './pages/studentQuiz/StudentQuizResults'
-import { AuthProvider, useAuth } from './auth/AuthContext'
+import StudentDashboardPage from './pages/StudentDashboardPage'
+import { AuthProvider } from './auth/AuthContext'
 import { auth } from './firebase'
 import './App.css'
 
@@ -45,9 +35,8 @@ function PlaceholderPage({ title, subtitle }) {
   )
 }
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ isLoading, user, children }) {
   const location = useLocation()
-  const { user, isLoading } = useAuth()
 
   if (isLoading) {
     return <div className="routeLoading">Checking login…</div>
@@ -60,8 +49,7 @@ function ProtectedRoute({ children }) {
   return children
 }
 
-function PublicOnlyRoute({ children }) {
-  const { user, isLoading } = useAuth()
+function PublicOnlyRoute({ isLoading, user, children }) {
   if (isLoading) {
     return <div className="routeLoading">Checking login…</div>
   }
@@ -80,8 +68,7 @@ function PublicOnlyRoute({ children }) {
   return children
 }
 
-function RoleOnlyRoute({ allowedRoles, children }) {
-  const { user, role, isLoading } = useAuth()
+function RoleOnlyRoute({ isLoading, user, role, allowedRoles, children }) {
   if (isLoading) {
     return <div className="routeLoading">Checking login…</div>
   }
@@ -109,45 +96,7 @@ function LegacyCourseDetailRedirect() {
   return <Navigate to={`/student/courses/${id}`} replace />
 }
 
-function RootIndexRedirect() {
-  const { role } = useAuth()
-  const normalizedRole = String(role || '').toLowerCase()
-  return (
-    <ProtectedRoute>
-      <Navigate
-        to={
-          normalizedRole === 'admin'
-            ? '/admin/dashboard'
-            : normalizedRole === 'staff'
-              ? '/staff/dashboard'
-              : '/student/home'
-        }
-        replace
-      />
-    </ProtectedRoute>
-  )
-}
-
-function CatchAllRedirect() {
-  const { user, role } = useAuth()
-  const normalizedRole = String(role || '').toLowerCase()
-  return (
-    <Navigate
-      to={
-        user
-          ? normalizedRole === 'admin'
-            ? '/admin/dashboard'
-            : normalizedRole === 'staff'
-              ? '/staff/dashboard'
-              : '/student/home'
-          : '/login'
-      }
-      replace
-    />
-  )
-}
-
-function RootLayout() {
+function App() {
   const location = useLocation()
   const [authUser, setAuthUser] = useState(null)
   const [authRole, setAuthRole] = useState(null)
@@ -199,257 +148,283 @@ function RootLayout() {
     return () => unsubscribe()
   }, [])
 
-  const isStudentQuizAttempt =
-    /^\/student\/quizzes\/[^/]+\/attempt\/[^/]+$/.test(location.pathname)
-
-  const showNavbar =
-    location.pathname !== '/login' &&
-    location.pathname !== '/reset' &&
-    !isStudentQuizAttempt
+  const showNavbar = location.pathname !== '/login' && location.pathname !== '/reset'
   const normalizedRole = String(authRole || '').toLowerCase() || null
 
   return (
     <AuthProvider value={{ user: authUser, role: normalizedRole, isLoading: isAuthLoading }}>
-      <div className={showNavbar ? 'appShell' : 'appShell appShell--noHeader'}>
+      <div className="appShell">
         {showNavbar ? <Navbar role={normalizedRole || 'student'} /> : null}
 
         <main>
-          <Outlet />
+          <Routes>
+          <Route
+            path="/login"
+            element={
+              <PublicOnlyRoute isLoading={isAuthLoading} user={authUser}>
+                <Login />
+              </PublicOnlyRoute>
+            }
+          />
+          <Route
+            path="/reset"
+            element={<ResetPassword />}
+          />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute isLoading={isAuthLoading} user={authUser}>
+                <Navigate
+                  to={
+                    normalizedRole === 'admin'
+                      ? '/admin/dashboard'
+                      : normalizedRole === 'staff'
+                        ? '/staff/dashboard'
+                        : '/student/home'
+                  }
+                  replace
+                />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Student routes */}
+          <Route
+            path="/student/dashboard"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <StudentDashboardPage />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/student/onboarding"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <StudentOnboarding />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/student/home"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <StudentHome />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/student/courses"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <Courses />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/student/courses/:id"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <CourseDetail />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/student/career"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <PlaceholderPage
+                  title="Career Tracks"
+                  subtitle="Career roadmap modules are coming soon with mentor-led paths and interview prep."
+                />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/student/profile"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['student']}>
+                <StudentProfile />
+              </RoleOnlyRoute>
+            }
+          />
+
+          {/* Backwards-compatible student paths */}
+          <Route path="/courses" element={<Navigate to="/student/courses" replace />} />
+          <Route path="/courses/:id" element={<LegacyCourseDetailRedirect />} />
+          <Route path="/career" element={<Navigate to="/student/career" replace />} />
+          <Route path="/profile" element={<Navigate to="/student/profile" replace />} />
+
+          {/* Admin routes */}
+          <Route
+            path="/admin/dashboard"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminDashboard />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminUsers />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/courses"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminCoursesManagement />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/courses/add"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminAddCourse />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/courses/:courseId"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminCourseEditorNew />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/reports"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <Reports />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/profile"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <PlaceholderPage title="Admin Profile" subtitle="Admin profile settings (coming soon)." />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/quizzes"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminQuizManagement />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/quizzes/new"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminQuizEditor />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/admin/quizzes/:id/edit"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['admin']}>
+                <AdminQuizEditor />
+              </RoleOnlyRoute>
+            }
+          />
+
+          {/* Staff routes */}
+          <Route
+            path="/staff/dashboard"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <StaffDashboard />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/courses"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <AdminCoursesManagement />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/courses/:courseId"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <AdminCourseEditorNew />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/reports"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <Reports />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/profile"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <PlaceholderPage title="Staff Profile" subtitle="Staff profile settings (coming soon)." />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/quizzes"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <AdminQuizManagement />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/quizzes/new"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <AdminQuizEditor />
+              </RoleOnlyRoute>
+            }
+          />
+          <Route
+            path="/staff/quizzes/:id/edit"
+            element={
+              <RoleOnlyRoute isLoading={isAuthLoading} user={authUser} role={normalizedRole} allowedRoles={['staff']}>
+                <AdminQuizEditor />
+              </RoleOnlyRoute>
+            }
+          />
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={
+                  authUser
+                    ? normalizedRole === 'admin'
+                      ? '/admin/dashboard'
+                      : normalizedRole === 'staff'
+                        ? '/staff/dashboard'
+                        : '/student/home'
+                    : '/login'
+                }
+                replace
+              />
+            }
+          />
+          </Routes>
         </main>
       </div>
     </AuthProvider>
   )
 }
 
-const router = createBrowserRouter([
-  {
-    element: <RootLayout />,
-    children: [
-      { path: '/login', element: <PublicOnlyRoute><Login /></PublicOnlyRoute> },
-      { path: '/reset', element: <ResetPassword /> },
-      { path: '/', element: <RootIndexRedirect /> },
-      {
-        path: '/student/onboarding',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <StudentOnboarding />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/home',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <StudentHome />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/courses',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <Courses />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/courses/:id',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <CourseDetail />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/quizzes',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <StudentQuizList />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/quizzes/:quizId',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <StudentQuizOverview />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/quizzes/:quizId/attempt/:attemptId',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <StudentQuizAttempt />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/quizzes/:quizId/results/:attemptId',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <StudentQuizResults />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/career',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <PlaceholderPage
-              title="Career Tracks"
-              subtitle="Career roadmap modules are coming soon with mentor-led paths and interview prep."
-            />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/student/profile',
-        element: (
-          <RoleOnlyRoute allowedRoles={['student']}>
-            <StudentProfile />
-          </RoleOnlyRoute>
-        ),
-      },
-      { path: '/courses', element: <Navigate to="/student/courses" replace /> },
-      { path: '/courses/:id', element: <LegacyCourseDetailRedirect /> },
-      { path: '/career', element: <Navigate to="/student/career" replace /> },
-      { path: '/profile', element: <Navigate to="/student/profile" replace /> },
-      {
-        path: '/admin/dashboard',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminDashboard />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/admin/users',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminUsers />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/admin/courses',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminCoursesManagement />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/admin/courses/add',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminAddCourse />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/admin/courses/:courseId/preview',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminCoursePreview />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/admin/courses/:courseId',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminCourseEditorNew />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/admin/quizzes',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminQuizManagement />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/admin/quizzes/new',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminQuizEditor />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/admin/quizzes/:id/edit',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <AdminQuizEditor />
-          </RoleOnlyRoute>
-        ),
-      },
-      { path: '/admin/reports', element: <Navigate to="/admin/quizzes" replace /> },
-      {
-        path: '/admin/profile',
-        element: (
-          <RoleOnlyRoute allowedRoles={['admin']}>
-            <PlaceholderPage title="Admin Profile" subtitle="Admin profile settings (coming soon)." />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/staff/dashboard',
-        element: (
-          <RoleOnlyRoute allowedRoles={['staff']}>
-            <StaffDashboard />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/staff/courses',
-        element: (
-          <RoleOnlyRoute allowedRoles={['staff']}>
-            <AdminCoursesManagement />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/staff/courses/:courseId/preview',
-        element: (
-          <RoleOnlyRoute allowedRoles={['staff']}>
-            <AdminCoursePreview />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/staff/courses/:courseId',
-        element: (
-          <RoleOnlyRoute allowedRoles={['staff']}>
-            <AdminCourseEditorNew />
-          </RoleOnlyRoute>
-        ),
-      },
-      {
-        path: '/staff/quizzes',
-        element: (
-          <RoleOnlyRoute allowedRoles={['staff']}>
-            <AdminQuizManagement />
-          </RoleOnlyRoute>
-        ),
-      },
-      { path: '/staff/reports', element: <Navigate to="/staff/quizzes" replace /> },
-      {
-        path: '/staff/profile',
-        element: (
-          <RoleOnlyRoute allowedRoles={['staff']}>
-            <PlaceholderPage title="Staff Profile" subtitle="Staff profile settings (coming soon)." />
-          </RoleOnlyRoute>
-        ),
-      },
-      { path: '*', element: <CatchAllRedirect /> },
-    ],
-  },
-])
-
-export default function App() {
-  return <RouterProvider router={router} />
-}
+export default App

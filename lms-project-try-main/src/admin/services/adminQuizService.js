@@ -17,10 +17,7 @@ const getAxiosInstance = () => {
 
 function toServiceError(error, fallbackMessage) {
   const apiMessage = error?.response?.data?.message;
-  const details = Array.isArray(error?.response?.data?.details)
-    ? error.response.data.details.join(', ')
-    : '';
-  return new Error(apiMessage || details || fallbackMessage);
+  return new Error(apiMessage || fallbackMessage);
 }
 
 export const adminQuizService = {
@@ -36,9 +33,9 @@ export const adminQuizService = {
     }
   },
 
-  getById: async (id) => {
+  getById: async (quizId) => {
     try {
-      const res = await getAxiosInstance().get(`/quizzes/${id}`);
+      const res = await getAxiosInstance().get(`/quizzes/${quizId}`);
       return res.data?.data ?? res.data;
     } catch (error) {
       throw toServiceError(error, 'Failed to load quiz');
@@ -54,48 +51,48 @@ export const adminQuizService = {
     }
   },
 
-  update: async (id, payload) => {
+  update: async (quizId, payload) => {
     try {
-      const res = await getAxiosInstance().put(`/quizzes/${id}`, payload);
+      const res = await getAxiosInstance().put(`/quizzes/${quizId}`, payload);
       return res.data?.data ?? res.data;
     } catch (error) {
       throw toServiceError(error, 'Failed to update quiz');
     }
   },
 
-  remove: async (id) => {
+  remove: async (quizId) => {
     try {
-      const res = await getAxiosInstance().delete(`/quizzes/${id}`);
+      const res = await getAxiosInstance().delete(`/quizzes/${quizId}`);
       return res.data;
     } catch (error) {
       throw toServiceError(error, 'Failed to delete quiz');
     }
   },
 
-  duplicate: async (id, payload = {}) => {
+  publish: async (quizId) => {
     try {
-      const res = await getAxiosInstance().post(`/quizzes/${id}/duplicate`, payload);
-      return res.data?.data ?? res.data;
-    } catch (error) {
-      throw toServiceError(error, 'Failed to duplicate quiz');
-    }
-  },
-
-  publish: async (id) => {
-    try {
-      const res = await getAxiosInstance().post(`/quizzes/${id}/publish`);
+      const res = await getAxiosInstance().post(`/quizzes/${quizId}/publish`);
       return res.data?.data ?? res.data;
     } catch (error) {
       throw toServiceError(error, 'Failed to publish quiz');
     }
   },
 
-  archive: async (id) => {
+  archive: async (quizId) => {
     try {
-      const res = await getAxiosInstance().post(`/quizzes/${id}/archive`);
+      const res = await getAxiosInstance().post(`/quizzes/${quizId}/archive`);
       return res.data?.data ?? res.data;
     } catch (error) {
       throw toServiceError(error, 'Failed to archive quiz');
+    }
+  },
+
+  duplicate: async (quizId) => {
+    try {
+      const res = await getAxiosInstance().post(`/quizzes/${quizId}/duplicate`);
+      return res.data?.data ?? res.data;
+    } catch (error) {
+      throw toServiceError(error, 'Failed to duplicate quiz');
     }
   },
 };

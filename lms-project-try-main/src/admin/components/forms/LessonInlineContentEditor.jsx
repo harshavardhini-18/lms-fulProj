@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { lessonContentImageExtension } from './LessonContentImageExtension';
+import { adminUploadService } from '../../services/adminUploadService';
 
 const EMPTY_DOC = { type: 'doc', content: [] };
 
@@ -55,18 +56,23 @@ export default function LessonInlineContentEditor({ value, onChange }) {
     setImageUrl('');
   };
 
-  const onFileUpload = (e) => {
+  const onFileUpload = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !editor || !file.type.startsWith('image/')) return;
     setUploadingImage(true);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      editor.chain().focus().setImage({ src: ev.target?.result, alt: file.name || 'Topic image' }).run();
+    try {
+      const result = await adminUploadService.uploadFile(file, { folder: 'lesson-images' });
+      const url = result?.data?.url;
+      if (url) {
+        editor.chain().focus().setImage({ src: url, alt: file.name || 'Topic image' }).run();
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Image upload failed', err);
+    } finally {
       setUploadingImage(false);
-    };
-    reader.onerror = () => setUploadingImage(false);
-    reader.readAsDataURL(file);
+    }
   };
 
   const headingLevel = editor?.isActive('heading', { level: 2 })

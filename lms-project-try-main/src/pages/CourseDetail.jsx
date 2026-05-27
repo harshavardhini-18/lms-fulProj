@@ -5,6 +5,7 @@ import TimedQuizGate from '../components/TimedQuizGate'
 import TableOfContents from '../components/TableOfContents'
 import HandwrittenCanvas from '../components/HandwrittenCanvas'
 import { getBackendCourseDetail, resolveBackendCourseId } from '../api/courses'
+import { apiFetch } from '../api/client'
 import { createNote, deleteNote, listNotesByCourse, updateNote } from '../api/notes'
 
 import { courses } from '../data/coursesData'
@@ -80,25 +81,31 @@ function buildModuleSections(lessons) {
   }))
 }
 
-function mapBackendModulesForToc(backendModules = []) {
+function mapBackendModulesForToc(backendModules = [], courseVideoUrl = '') {
   return backendModules.map((module, moduleIndex) => ({
     id: module.id || `module-${moduleIndex}`,
     title: module.title || moduleTitles[moduleIndex] || `Module ${moduleIndex + 1}`,
     lessons: Array.isArray(module.lessons)
-      ? module.lessons.map((lesson, lessonIndex) => ({
-          id: lesson.id || `${module.id || moduleIndex}-${lessonIndex}`,
-          title: lesson.title || `Lesson ${lessonIndex + 1}`,
-          startSeconds: Number(lesson.timestampStart ?? lesson.timestamp_start ?? 0),
-          duration: lesson.duration || lesson.durationLabel || '',
-          // Support all known backend video field names to avoid blank players.
-          videoUrl: String(
+      ? module.lessons.map((lesson, lessonIndex) => {
+          // Support all known backend video field names
+          const lessonVideoUrl = String(
             lesson.videoUrl ||
             lesson.primaryVideoUrl ||
             lesson.video_url ||
+            courseVideoUrl || // Fallback to course video if lesson doesn't have one
             ''
-          ).trim(),
-          contentJson: lesson.contentJson || lesson.content_json || { type: 'doc', content: [] },
-        }))
+          ).trim()
+          
+          return {
+            id: lesson.id || `${module.id || moduleIndex}-${lessonIndex}`,
+            title: lesson.title || `Lesson ${lessonIndex + 1}`,
+            startSeconds: Number(lesson.timestampStart ?? lesson.timestamp_start ?? 0),
+            duration: lesson.duration || lesson.durationLabel || '',
+            videoUrl: lessonVideoUrl,
+            quizId: lesson.quizId || lesson.quiz_id || '',
+            contentJson: lesson.contentJson || lesson.content_json || { type: 'doc', content: [] },
+          }
+        })
       : [],
   }))
 }
@@ -175,15 +182,22 @@ function CourseDetail() {
   const [backendDetailLoading, setBackendDetailLoading] = useState(true)
 
   const backendModules = useMemo(
-    () => mapBackendModulesForToc(backendCourseDetail?.modules || []),
-    [backendCourseDetail]
+    () => mapBackendModulesForToc(backendCourseDetail?.modules || [], course?.videoUrl || ''),
+    [backendCourseDetail, course?.videoUrl]
   )
   const flattenedBackendLessons = useMemo(
     () => backendModules.flatMap((module) => module.lessons || []),
     [backendModules]
   )
   const lessons = useMemo(
-    () => (flattenedBackendLessons.length > 0 ? flattenedBackendLessons : course?.lessons || []),
+    () => {
+      // Use backend lessons if they have video URLs
+      if (flattenedBackendLessons.length > 0 && flattenedBackendLessons.some(l => l.videoUrl)) {
+        return flattenedBackendLessons
+      }
+      // Otherwise use frontend course lessons as fallback
+      return course?.lessons || []
+    },
     [flattenedBackendLessons, course]
   )
   const modules = useMemo(
@@ -193,10 +207,21 @@ function CourseDetail() {
   const [activeLessonIndex, setActiveLessonIndex] = useState(0)
   const [isQuizVisible, setIsQuizVisible] = useState(false)
   const [isQuizCompleted, setIsQuizCompleted] = useState(false)
+  const [youtubeCurrentTime, setYoutubeCurrentTime] = useState(0)
   const timedQuiz = course?.timedQuiz || defaultTimedQuiz
+  const quizTriggerSeconds = Number(timedQuiz?.timestampSeconds ?? 10)
   const currentLesson = lessons[activeLessonIndex] || null
   const videoSrc = currentLesson?.videoUrl || course?.videoUrl || ''
+  const currentLessonQuizId = currentLesson?.quizId || currentLesson?.quiz_id || ''
+  const shouldUseFallbackQuiz = !currentLessonQuizId && flattenedBackendLessons.length === 0
+  const hasLessonQuizGate = Boolean(currentLessonQuizId || shouldUseFallbackQuiz)
   const lessonContentJson = currentLesson?.contentJson || null
+  const [lessonQuizState, setLessonQuizState] = useState({
+    loading: false,
+    error: '',
+    data: null,
+  })
+  const [quizReloadToken, setQuizReloadToken] = useState(0)
   const hasBackendRichContent = Boolean(
     lessonContentJson &&
       lessonContentJson.type === 'doc' &&
@@ -207,6 +232,22 @@ function CourseDetail() {
   const courseTitle = course?.title || backendCourseDetail?.title || 'Course'
   const courseImage =
     course?.image || backendCourseDetail?.thumbnailUrl || backendCourseDetail?.bannerUrl || ''
+
+  const lessonQuiz = useMemo(() => {
+    if (!lessonQuizState.data?.questions) return null
+    const questions = lessonQuizState.data.questions.map((q, index) => ({
+      id: q.id || `quiz-${index}`,
+      type: q.type || 'mcq',
+      question: q.prompt || q.question || '',
+      codeImageUrl: q.codeImageUrl || '',
+      options: Array.isArray(q.options) ? q.options : [],
+      acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : [],
+    }))
+    return {
+      title: lessonQuizState.data.title || 'Quiz',
+      questions,
+    }
+  }, [lessonQuizState.data])
 
   const [sidebarTab, setSidebarTab] = useState('toc') // 'toc' | 'notes'
   const [notes, setNotes] = useState([])
@@ -262,6 +303,37 @@ function CourseDetail() {
       cancelled = true
     }
   }, [course, id])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!currentLessonQuizId) {
+      setLessonQuizState({ loading: false, error: '', data: null })
+      return undefined
+    }
+
+    const loadQuiz = async () => {
+      setLessonQuizState({ loading: true, error: '', data: null })
+      try {
+        const payload = await apiFetch(`/api/quizzes/${currentLessonQuizId}`)
+        if (!cancelled) {
+          setLessonQuizState({ loading: false, error: '', data: payload?.data || null })
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setLessonQuizState({
+            loading: false,
+            error: err?.message || 'Unable to load quiz for this lesson.',
+            data: null,
+          })
+        }
+      }
+    }
+
+    loadQuiz()
+    return () => {
+      cancelled = true
+    }
+  }, [currentLessonQuizId, quizReloadToken])
 
   // LOAD NOTES (backend only)
   useEffect(() => {
@@ -320,7 +392,7 @@ function CourseDetail() {
 
       setActiveLessonIndex(getActiveLessonIndex(lessons, time))
 
-      if (!isQuizCompleted && time >= timedQuiz.timestampSeconds) {
+      if (!isQuizCompleted && hasLessonQuizGate && time >= quizTriggerSeconds) {
         video.pause()
         setIsQuizVisible(true)
       }
@@ -328,7 +400,36 @@ function CourseDetail() {
 
     video.addEventListener('timeupdate', handler)
     return () => video.removeEventListener('timeupdate', handler)
-  }, [lessons, timedQuiz, isQuizCompleted])
+  }, [lessons, quizTriggerSeconds, isQuizCompleted, hasLessonQuizGate])
+
+  // Handle YouTube iframe video detection and quiz for embedded YouTube videos
+  useEffect(() => {
+    const isYouTubeVideo = videoSrc && (
+      videoSrc.includes('youtube.com') || 
+      videoSrc.includes('youtu.be') ||
+      videoSrc.includes('youtube.com/embed')
+    )
+
+    if (!isYouTubeVideo || isQuizCompleted) return
+
+    // For YouTube videos, show quiz when currentTime reaches threshold
+    if (youtubeCurrentTime > 0 && hasLessonQuizGate && youtubeCurrentTime >= quizTriggerSeconds) {
+      console.log(`[CourseDetail] YouTube quiz triggered at ${youtubeCurrentTime}s >= ${quizTriggerSeconds}s`)
+      setIsQuizVisible(true)
+      return
+    }
+
+    // FALLBACK: If YouTube time tracking fails, show quiz after delay
+    // This ensures quiz always shows even if YouTube API doesn't work
+    const fallbackTimer = setTimeout(() => {
+      if (!isQuizCompleted && hasLessonQuizGate && !youtubeCurrentTime) {
+        console.log(`[CourseDetail] Fallback: Showing quiz for YouTube after ${quizTriggerSeconds}s`)
+        setIsQuizVisible(true)
+      }
+    }, quizTriggerSeconds * 1000)
+
+    return () => clearTimeout(fallbackTimer)
+  }, [youtubeCurrentTime, videoSrc, quizTriggerSeconds, isQuizCompleted, hasLessonQuizGate])
 
   useEffect(() => {
     if (!shouldScrollAfterCreateRef.current) return
@@ -726,8 +827,17 @@ function CourseDetail() {
               modules={modules}
               activeLessonIndex={activeLessonIndex}
               onLessonSelect={(i, t) => {
-                videoRef.current.currentTime = t
-                videoRef.current.play()?.catch(() => {})
+                // Update the active lesson index immediately
+                setActiveLessonIndex(i)
+                // Reset quiz state for new lesson
+                setIsQuizVisible(false)
+                setIsQuizCompleted(false)
+                setYoutubeCurrentTime(0)
+                // Seek video to lesson start time
+                if (videoRef.current) {
+                  videoRef.current.currentTime = t
+                  videoRef.current.play()?.catch(() => {})
+                }
               }}
             />
           )}
@@ -848,16 +958,36 @@ function CourseDetail() {
             <h1 className={styles.courseTitleCentered}>{courseTitle}</h1>
           </div>
 
-          <VideoPlayer ref={videoRef} title={courseTitle} src={videoSrc}>
+          <VideoPlayer
+            ref={videoRef}
+            title={courseTitle}
+            src={videoSrc}
+            onTimeUpdate={setYoutubeCurrentTime}
+            isLocked={isQuizVisible}
+          >
             {isQuizVisible && (
-              <TimedQuizGate
-                quiz={timedQuiz}
-                onSuccess={() => {
-                  setIsQuizCompleted(true)
-                  setIsQuizVisible(false)
-                  videoRef.current.play()?.catch(() => {})
-                }}
-              />
+              currentLessonQuizId ? (
+                <TimedQuizGate
+                  quiz={lessonQuiz}
+                  loading={lessonQuizState.loading}
+                  error={lessonQuizState.error}
+                  onRetry={() => setQuizReloadToken((prev) => prev + 1)}
+                  onSuccess={() => {
+                    setIsQuizCompleted(true)
+                    setIsQuizVisible(false)
+                    videoRef.current.play()?.catch(() => {})
+                  }}
+                />
+              ) : shouldUseFallbackQuiz ? (
+                <TimedQuizGate
+                  quiz={timedQuiz}
+                  onSuccess={() => {
+                    setIsQuizCompleted(true)
+                    setIsQuizVisible(false)
+                    videoRef.current.play()?.catch(() => {})
+                  }}
+                />
+              ) : null
             )}
           </VideoPlayer>
 

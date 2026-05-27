@@ -105,3 +105,13 @@ export function requireStudent(req, res, next) {
 	}
 	next();
 }
+
+export function requireInstructor(req, res, next) {
+	if (!req.user) {
+		return next(new AppError('Authentication required. Provide x-user-id header.', 401));
+	}
+	if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+		return next(new AppError('Instructor access required', 403));
+	}
+	next();
+}

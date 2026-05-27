@@ -21,7 +21,7 @@ export const courses = [
     duration: '1 Hr',
     language: 'English',
     image: 'https://picsum.photos/seed/ai-deploy-course/1200/675',
-  videoUrl: "https://filesamples.com/samples/video/mp4/sample_640x360.mp4",
+    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
     description:
       'In this 1-hour intensive course, you will learn how to build and deploy practical AI applications by integrating model APIs, structuring prompts, handling backend orchestration, and applying production best practices for reliability, observability, and cost efficiency.In this 1-hour intensive course, you will learn how to build and deploy practical AI applications by integrating model APIs, structuring prompts, handling backend orchestration, and applying production best practices for reliability, observability, and cost efficiency.',
     lessons: [
@@ -37,7 +37,7 @@ export const courses = [
     duration: '4 Hrs',
     language: 'English',
     image: 'https://picsum.photos/seed/c-programming-course/1200/675',
-videoUrl: 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
     description:
       'In this 4-hour C Programming course, you will develop a strong foundation in syntax, control flow, functions, arrays, pointers, and memory management, while practicing structured problem-solving to write efficient, reliable, and interview-ready programs.',
     lessons: [
@@ -53,7 +53,7 @@ videoUrl: 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4',
     duration: '4 Hrs',
     language: 'English',
     image: 'https://picsum.photos/seed/applied-ai-course/1200/675',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
     description:
       'In this 4-hour Applied AI course, you will learn how to translate business problems into AI use cases, prepare data, choose and evaluate models, and communicate measurable outcomes, giving you a practical framework for implementing AI in real scenarios.',
     lessons: [
@@ -69,7 +69,7 @@ videoUrl: 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4',
     duration: '2 Hrs',
     language: 'English',
     image: 'https://picsum.photos/seed/chatgpt-bengali-course/1200/675',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
     description:
       'In this 2-hour JavaScript course, you will learn core language fundamentals such as variables, functions, arrays, objects, and DOM interactions, enabling you to create interactive browser features and build a solid base for modern web development.',
     lessons: [
@@ -85,7 +85,7 @@ videoUrl: 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4',
     duration: '2 Hrs',
     language: 'English',
     image: 'https://picsum.photos/seed/chatgpt-everyone-course/1200/675',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
     description:
       'In this 2-hour TypeScript course, you will learn static typing, interfaces, generics, and safe project structure patterns, helping you build scalable JavaScript applications with stronger code quality, better tooling support, and fewer runtime errors.',
     lessons: [

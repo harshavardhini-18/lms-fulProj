@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styles from './StudentOnboarding.module.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -9,6 +10,7 @@ const STEPS = [
 ];
 
 export default function StudentOnboarding() {
+  const navigate = useNavigate();
   const [step,    setStep]    = useState(1);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
@@ -65,10 +67,11 @@ export default function StudentOnboarding() {
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Failed'); }
       setSuccess('Profile saved! Redirecting…');
+      // Mark that onboarding was just completed to skip the check
+      sessionStorage.setItem('onboardingJustCompleted', 'true');
       setTimeout(() => {
-        const role = String(localStorage.getItem('lmsUserRole') || 'student').toLowerCase();
-        window.location.href = role === 'student' ? '/student/home' : '/dashboard';
-      }, 1500);
+        navigate('/student/home', { replace: true });
+      }, 1000);
     } catch (err) {
       setError(err.message || 'Something went wrong. Try again.');
     } finally { setLoading(false); }

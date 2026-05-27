@@ -78,30 +78,9 @@ export async function firebaseAdminLogin(idToken) {
 		[email]
 	);
 
-	let user = result.rows[0];
+	const user = result.rows[0];
 
-	// Auto-provision a student user in PostgreSQL on first Firebase signup.
-	if (!user) {
-		const roleRes = await pool.query(
-			`SELECT id FROM roles WHERE role_name = 'student'`
-		);
-
-		if (!roleRes.rows[0]) {
-			throw new AppError('Student role missing in roles table', 500);
-		}
-
-		const fullName = (decoded.name || email.split('@')[0] || 'Student').toString().trim() || 'Student';
-
-		const inserted = await pool.query(
-			`INSERT INTO users (full_name, email, password_hash, role_id, status, firebase_uid, is_first_time)
-			 VALUES ($1, $2, NULL, $3, 'active', $4, TRUE)
-			 RETURNING *`,
-			[fullName, email, roleRes.rows[0].id, decoded.uid]
-		);
-
-		user = inserted.rows[0];
-	}
-
+	if (!user) throw new AppError('User not found', 404);
 	if (user.status !== 'active') throw new AppError('User inactive', 403);
 	user.role = roleNameFromRoleId(user.role_id);
 
@@ -231,37 +210,12 @@ export async function createUserByAdmin(payload) {
 /* ---------------- UPDATE PROFILE ---------------- */
 
 export async function updateUserProfile(userId, payload) {
-	const ob = payload?.onboarding || {};
-	const fullName =
-		(payload?.fullName && String(payload.fullName).trim()) ||
-		`${ob.firstName || ''} ${ob.lastName || ''}`.trim() ||
-		null;
-
 	await pool.query(
-		`UPDATE users SET
-			full_name = COALESCE($1, full_name),
-			first_name = COALESCE($2, first_name),
-			last_name = COALESCE($3, last_name),
-			phone = COALESCE($4, phone),
-			department = COALESCE($5, department),
-			year_of_study = COALESCE($6, year_of_study),
-			college_name = COALESCE($7, college_name),
-			roll_no = COALESCE($8, roll_no)
-		 WHERE id = $9`,
-		[
-			fullName,
-			ob.firstName ?? null,
-			ob.lastName ?? null,
-			ob.phone ?? null,
-			ob.department ?? null,
-			ob.yearOfStudy ?? null,
-			ob.collegeName ?? null,
-			ob.rollNo ?? null,
-			userId,
-		]
+		`UPDATE users SET full_name = $1 WHERE id = $2`,
+		[payload.fullName, userId]
 	);
 
-	return getUserById(userId);
+	return { success: true };
 }
 
 /* ---------------- ONBOARDING ---------------- */

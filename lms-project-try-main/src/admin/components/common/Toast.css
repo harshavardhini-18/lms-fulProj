@@ -1,8 +1,5 @@
 .toast {
   position: fixed;
-  top: auto;
-  left: auto;
-  transform: none;
   bottom: 2rem;
   right: 2rem;
   padding: 1rem 1.5rem;
@@ -12,26 +9,6 @@
   gap: 1rem;
   z-index: 1000;
   animation: slideIn 0.3s ease-out;
-}
-
-.toast-top-center {
-  top: 5.25rem;
-  left: 50%;
-  right: auto;
-  bottom: auto;
-  transform: translateX(-50%);
-  animation: slideDown 0.24s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    transform: translateX(-50%) translateY(-12px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(-50%) translateY(0);
-    opacity: 1;
-  }
 }
 
 @keyframes slideIn {
@@ -79,17 +56,6 @@
     bottom: 1rem;
     right: 1rem;
     left: 1rem;
-    top: auto;
-    transform: none;
-    animation: slideUp 0.3s ease-out;
-  }
-
-  .toast-top-center {
-    top: 4.5rem;
-    left: 1rem;
-    right: 1rem;
-    bottom: auto;
-    transform: none;
     animation: slideUp 0.3s ease-out;
   }
 

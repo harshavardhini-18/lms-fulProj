@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { lessonContentImageExtension } from './LessonContentImageExtension';
+import { adminUploadService } from '../../services/adminUploadService';
 import './LessonContentModal.css';
 
 const EMPTY_DOC = { type: 'doc', content: [] };
@@ -47,22 +48,25 @@ export default function LessonContentModal({ isOpen, initialContent, topicTitle,
     setImageUrl('');
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file || !editor) return;
     if (!file.type.startsWith('image/')) return;
 
     setUploadingImage(true);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target.result;
-      editor.chain().focus().setImage({ src: dataUrl, alt: file.name }).run();
+    try {
+      const result = await adminUploadService.uploadFile(file, { folder: 'lesson-images' });
+      const url = result?.data?.url;
+      if (url) {
+        editor.chain().focus().setImage({ src: url, alt: file.name || 'Topic image' }).run();
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Image upload failed', err);
+    } finally {
       setUploadingImage(false);
-    };
-    reader.onerror = () => setUploadingImage(false);
-    reader.readAsDataURL(file);
-    // Reset so same file can be picked again
-    e.target.value = '';
+    }
   };
 
   const handleSetLink = () => {

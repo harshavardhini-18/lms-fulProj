@@ -177,7 +177,7 @@ export default function StudentQuizResults() {
       <header className="sqResultsHero">
         <div className="sqResultsHeroInner">
           <div className="sqResultsHeroMain">
-            <p className="sqResultsKicker">Quiz results</p>
+            <p className="sqResultsKicker"></p>
             <h1 className="sqResultsTitle">{data.quizTitle}</h1>
             <div className="sqResultsScoreBlock">
               <span className="sqResultsScoreNum">{data.percent}</span>

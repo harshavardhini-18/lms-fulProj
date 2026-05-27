@@ -5,6 +5,7 @@ import { initializeIndexes } from './models/index.js';
 import { pool } from './config/postgres.js';
 import { ensurePasswordResetTable } from './services/passwordResetService.js';
 import { ensureCourseSchema } from './services/courseSchemaService.js';
+import { ensureProgressSchema } from './services/progressSchemaService.js';
 
 dotenv.config();
 
@@ -22,6 +23,8 @@ async function bootstrap() {
 		console.log('PostgreSQL password_resets table ready');
 		await ensureCourseSchema();
 		console.log('PostgreSQL course/module/lesson schema ready');
+		await ensureProgressSchema();
+		console.log('PostgreSQL course & quiz progress schema ready');
 
 		// 3. Optional indexes sync
 		if (process.env.SYNC_INDEXES === 'true') {

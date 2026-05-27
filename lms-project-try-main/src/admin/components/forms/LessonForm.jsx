@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import LessonInlineContentEditor from './LessonInlineContentEditor';
 import QuizPreviewModal from '../quiz/QuizPreviewModal';
 import { adminQuizService } from '../../services/adminQuizService';
+import { adminUploadService } from '../../services/adminUploadService';
 import './LessonForm.css';
 
 const EMPTY_DOC = { type: 'doc', content: [] };
@@ -194,14 +195,6 @@ export default function LessonForm({ lesson, onSave, saving }) {
     setStepError('');
   };
 
-  const readFileAsDataUrl = (file) =>
-    new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result);
-      r.onerror = reject;
-      r.readAsDataURL(file);
-    });
-
   const handleThumbFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -211,8 +204,11 @@ export default function LessonForm({ lesson, onSave, saving }) {
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setFormData((prev) => ({ ...prev, thumbnailUrl: dataUrl }));
+      const result = await adminUploadService.uploadFile(file, { folder: 'lesson-thumbnails' });
+      const url = result?.data?.url;
+      if (url) {
+        setFormData((prev) => ({ ...prev, thumbnailUrl: url }));
+      }
       setStepError('');
     } catch {
       /* ignore */

@@ -4,6 +4,7 @@ import {
   gradeFillBlankAnswer,
   getFillBlankCorrectAnswer,
 } from '../utils/fillBlankAnswerValidation.js';
+import { recordCourseQuizSubmit } from './courseProgressPgService.js';
 
 function parseId(value, label) {
   const parsed = Number(value);
@@ -466,6 +467,19 @@ export async function submitAttempt(attemptId, userId) {
        WHERE id = $5`,
       [timeSpent, totalEarned, maxPoints, JSON.stringify(breakdown), aid]
     );
+
+    const courseProgress = await recordCourseQuizSubmit({
+      attemptId: aid,
+      userId,
+      quizId: attempt.quiz_id,
+      scoreEarned: totalEarned,
+      maxPoints,
+      questions,
+      answersMap: answers,
+      breakdown,
+      client,
+    });
+
     await client.query('COMMIT');
 
     return {
@@ -476,6 +490,7 @@ export async function submitAttempt(attemptId, userId) {
       percent: maxPoints > 0 ? Math.round((totalEarned / maxPoints) * 100) : 0,
       timeSpentSeconds: timeSpent,
       breakdown,
+      courseProgress: courseProgress || undefined,
     };
   } catch (e) {
     await client.query('ROLLBACK');
